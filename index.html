@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Hear-C: SDL2 Audio Demo</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .emscripten {
+        padding: 0;
+        margin: 0 auto;
+        display: block;
+      }
+      textarea.emscripten {
+        resize: none;
+        width: 80%;
+        height: 150px;
+        border: 1px solid #999;
+        padding: 5px;
+        font-family: monospace;
+      }
+      div.emscripten {
+        text-align: center;
+        margin-top: 20px;
+      }
+      .spinner {
+        height: 30px;
+        width: 30px;
+        margin: 0 auto;
+        animation: rotation 1.5s linear infinite;
+        border: 6px solid #3498db;
+        border-top: 6px solid #f5f5f5;
+        border-radius: 100%;
+      }
+      @keyframes rotation {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      #controls {
+        margin: 20px auto;
+        max-width: 800px;
+        text-align: center;
+        padding: 10px;
+        background-color: #e0e0e0;
+        border-radius: 8px;
+      }
+      #status {
+        display: inline-block;
+        margin-left: 20px;
+      }
+      #startAudio {
+        padding: 10px 20px;
+        font-size: 16px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 20px auto;
+        display: block;
+      }
+      #startAudio:hover {
+        background-color: #45a049;
+      }
+      #startAudio:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 style="text-align: center;">Hear-C: SDL2 Audio Demo</h1>
+    
+    <div id="controls">
+      <button id="startAudio" disabled>Start Audio</button>
+      <p>Use the arrow keys to change the frequency:</p>
+      <p>↑ - Increase pitch | ↓ - Decrease pitch</p>
+    </div>
+
+    <div class="emscripten" id="status">Downloading...</div>
+    <div class="emscripten">
+      <progress value="0" max="100" id="progress" hidden></progress>  
+    </div>
+    <div class="emscripten_border">
+      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+    </div>
+    <div class="emscripten">
+      <textarea class="emscripten" id="output" rows="8"></textarea>
+    </div>
+
+    <script type='text/javascript'>
+      var statusElement = document.getElementById('status');
+      var progressElement = document.getElementById('progress');
+      var outputElement = document.getElementById('output');
+      var startAudioButton = document.getElementById('startAudio');
+      var audioContext = null;
+      var audioStarted = false;
+
+      var Module = {
+        preRun: [],
+        postRun: [],  // Change this to an array instead of a function
+        print: (function() {
+          outputElement.value = ''; // Clear output on start
+          return function(text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+            console.log(text);
+            outputElement.value += text + "\n";
+            outputElement.scrollTop = outputElement.scrollHeight;
+          };
+        })(),
+        canvas: (function() {
+          var canvas = document.getElementById('canvas');
+          canvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+          return canvas;
+        })(),
+        setStatus: function(text) {
+          if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+          if (text === Module.setStatus.last.text) return;
+          var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+          var now = Date.now();
+          if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
+          Module.setStatus.last.time = now;
+          Module.setStatus.last.text = text;
+          if (m) {
+            text = m[1];
+            progressElement.value = parseInt(m[2])*100;
+            progressElement.max = parseInt(m[4])*100;
+            progressElement.hidden = false;
+          } else {
+            progressElement.value = null;
+            progressElement.max = null;
+            progressElement.hidden = true;
+            
+            // Enable the audio button when status indicates loading is complete
+            if (text === 'All downloads complete.') {
+              console.log("Enabling audio button");
+              startAudioButton.disabled = false;
+            }
+          }
+          statusElement.innerHTML = text;
+        },
+        totalDependencies: 0,
+        monitorRunDependencies: function(left) {
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+        }
+      };
+      
+      // Also enable the button when the module is fully loaded
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          if (startAudioButton.disabled) {
+            console.log("Enabling audio button after page load");
+            startAudioButton.disabled = false;
+          }
+        }, 3000); // Give it 3 seconds after page load as a fallback
+      });
+      
+      Module.setStatus('Downloading...');
+      
+      // Handle the audio button (start/stop)
+      startAudioButton.addEventListener('click', function() {
+        if (!audioStarted) {
+          // START AUDIO
+          try {
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioContext = new AudioContext();
+            
+            // For SDL2 audio, we need to resume the context
+            if (audioContext.state === 'suspended') {
+              audioContext.resume();
+            }
+            
+            // This is a special function that SDL2 will use
+            window.SDL2 = window.SDL2 || {};
+            window.SDL2.audioContext = audioContext;
+            
+            // Call our C++ function to start the audio
+            if (Module && typeof Module.ccall === 'function') {
+              console.log("Starting audio...");
+              Module.ccall('startAudio', null, [], []);
+            }
+            
+            console.log("Audio context started successfully");
+            startAudioButton.textContent = "Stop Audio";
+            audioStarted = true;
+            
+            // Focus the canvas for keyboard events
+            document.getElementById('canvas').focus();
+          } catch (e) {
+            console.error("Error starting audio context:", e);
+            alert("Failed to start audio. Your browser may not support WebAudio API.");
+          }
+        } else {
+          // STOP AUDIO
+          try {
+            // Call our C++ function to stop the audio
+            if (Module && typeof Module.ccall === 'function') {
+              console.log("Stopping audio...");
+              Module.ccall('stopAudio', null, [], []);
+            }
+            
+            // Optionally suspend the audio context
+            if (audioContext && audioContext.state === 'running') {
+              audioContext.suspend();
+            }
+            
+            console.log("Audio stopped successfully");
+            startAudioButton.textContent = "Start Audio";
+            audioStarted = false;
+          } catch (e) {
+            console.error("Error stopping audio:", e);
+          }
+        }
+      });
+      
+      window.onerror = function() {
+        Module.setStatus('Exception thrown, see JavaScript console');
+        Module.setStatus = function(text) {
+          if (text) console.error('[post-exception status] ' + text);
+        };
+      };
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>
