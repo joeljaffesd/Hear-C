@@ -25,8 +25,10 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
     
     // Fill the audio buffer
     for (int i = 0; i < samples; i++) {
-        // Generate a simple sine wave
-        float sample = mOsc();
+
+        // Call the user-defined function to get the next sample
+        float sample = nextSample(); // make sure to define this!
+
         // Write to both channels for stereo
         buffer[i * CHANNELS] = sample;       // Left channel
         buffer[i * CHANNELS + 1] = sample;   // Right channel

@@ -43,4 +43,10 @@ void init() {
   mOsc.freq(220.f);
 }
 
+// per-sample callback, no input (yet)
+// this must be defined, or compilation will fail
+float nextSample() {
+  return mOsc();
+}
+
 #endif
