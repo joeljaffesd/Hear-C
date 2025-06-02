@@ -40,6 +40,7 @@ void mainLoop() {
         std::cout << "Main loop started! WebAssembly is running." << std::endl;
         std::cout << "Audio device ID: " << audioDevice << std::endl;
         mainLoopInitialized = true;
+        init();
     }
     
     // Optional: Uncomment to continuously monitor if needed

@@ -2,8 +2,7 @@
 #define USER_H
 
 /*
-NOTE:
-SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
+NOTE: SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
 */
 
 // object definition
@@ -37,5 +36,11 @@ public:
 
 // global instance of object
 SinOsc mOsc{SAMPLE_RATE};
+
+// init function, called once when app starts
+void init() { 
+  std::cout << "Init called!" << std::endl;
+  mOsc.freq(220.f);
+}
 
 #endif
