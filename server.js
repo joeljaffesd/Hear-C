@@ -63,20 +63,47 @@ const server = http.createServer((req, res) => {
     
     // Execute the build script
     exec('./run.sh build', (error, stdout, stderr) => {
+      // Check for compilation errors
+      const hasCompilationError = stderr && stderr.includes("error:");
+      const errorMessages = [];
+      
       if (error) {
         console.error(`Error during build: ${error.message}`);
-        res.writeHead(500);
-        res.end(JSON.stringify({ success: false, error: error.message }));
-        return;
+        errorMessages.push(error.message);
       }
       
       if (stderr) {
         console.error(`Build stderr: ${stderr}`);
+        
+        // Parse Emscripten error messages
+        const errorLines = stderr.split('\n').filter(line => 
+          line.includes("error:") || 
+          line.includes("warning:") || 
+          line.includes("undefined reference")
+        );
+        
+        errorMessages.push(...errorLines);
       }
       
       console.log(`Build stdout: ${stdout}`);
-      res.writeHead(200);
-      res.end(JSON.stringify({ success: true, output: stdout }));
+      
+      if (hasCompilationError || error) {
+        res.writeHead(400); // Use 400 instead of 500 for compilation errors
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: "Compilation failed", 
+          errorDetails: errorMessages,
+          stdout: stdout,
+          stderr: stderr
+        }));
+      } else {
+        res.writeHead(200);
+        res.end(JSON.stringify({ 
+          success: true, 
+          output: stdout,
+          warnings: stderr ? stderr : null
+        }));
+      }
     });
     return;
   }
@@ -104,16 +131,41 @@ const server = http.createServer((req, res) => {
     
     req.on('end', () => {
       try {
-        const { content } = JSON.parse(body);
+        const parsedBody = JSON.parse(body);
+        const { content } = parsedBody;
         
-        fs.writeFileSync(path.join(__dirname, 'src', 'user.h'), content);
-        res.writeHead(200);
-        res.end(JSON.stringify({ success: true }));
+        if (content === undefined) {
+          console.error('No content provided in update request');
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'No content provided' }));
+          return;
+        }
         
-        console.log('Source file updated. Ready to rebuild.');
-      } catch (error) {
-        res.writeHead(500);
-        res.end(JSON.stringify({ success: false, error: error.message }));
+        const filePath = path.join(__dirname, 'src', 'user.h');
+        
+        // Check if the file exists
+        if (!fs.existsSync(path.dirname(filePath))) {
+          console.error(`Directory not found: ${path.dirname(filePath)}`);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Source directory not found' }));
+          return;
+        }
+        
+        try {
+          fs.writeFileSync(filePath, content);
+          console.log('Source file updated. Ready to rebuild.');
+          
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (fileError) {
+          console.error(`Error writing to file: ${fileError.message}`);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: `Error writing to file: ${fileError.message}` }));
+        }
+      } catch (parseError) {
+        console.error(`Error parsing request body: ${parseError.message}`);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: `Invalid request format: ${parseError.message}` }));
       }
     });
     return;
