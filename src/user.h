@@ -1,46 +1,31 @@
 #ifndef USER_H
 #define USER_H
 
+#include "../Gimmel/include/gimmel.hpp"
+
 /*
 NOTE: SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
 */
 
-// object definition
-class SinOsc {
-private:
-  float mPhase = 0.f; 
-  float mSampleRate = 0.f;
-  float mFrequency = 440.f;
-
-public:
-  SinOsc() = delete;
-  SinOsc(float sampleRate) {
-    this->mSampleRate = sampleRate;
-  }
-
-  float freq() { return mFrequency; }
-  void freq(float newFreq) { this->mFrequency = newFreq; }
-
-  float processSample() {
-    mPhase += 2.0f * M_PI * mFrequency / mSampleRate;
-    if (mPhase > 2.0f * M_PI) {
-      mPhase -= 2.0f * M_PI;  // Keep phase in the [0, 2π] range
-    }
-    return std::sin(mPhase);
-  }
-
-  float operator()() {
-    return this->processSample();
-  }
-};
-
 // global instance of object
-SinOsc mOsc{SAMPLE_RATE};
+giml::Phasor<float> mOsc{SAMPLE_RATE};
+giml::Delay<float> mDelay{SAMPLE_RATE};
+giml::EffectsLine<float> mEffectsLine;
+
 
 // init function, called once when app starts
 void init() { 
   std::cout << "Init called!" << std::endl;
-  mOsc.freq(220.f);
+  mDelay.toggle(true);  
+  mDelay.setParams();  
+  mEffectsLine.pushBack(&mDelay);  
+  mOsc.setFrequency(1.f);
+}
+
+// Per-sample audio callback
+// This function must be defined, or compilation will fail!
+float nextSample() {
+  return mEffectsLine.processSample(mOsc.processSample());
 }
 
 #endif
