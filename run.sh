@@ -30,17 +30,22 @@ build_project() {
 start_server() {
     # Run a local server from the project root
     echo "Starting local server from project root..."
-    echo "Open your browser and navigate to http://localhost:8000/build/"
+    echo "Open your browser and navigate to http://localhost:8080/build/"
     cd build
-    python3 -m http.server || python -m SimpleHTTPServer
+    python3 -m http.server 8080 || python -m SimpleHTTPServer 8080
 }
 
 # Function to start the rebuild server
 start_rebuild_server() {
     echo "Starting rebuild server..."
     echo "This will allow rebuilding the project from the browser."
-    echo "Open your browser and navigate to http://localhost:8000/ to view your application."
+    echo "Open your browser and navigate to http://localhost:3000/ to view your application."
     echo "The rebuild server will handle both rebuilding and serving the files."
+    
+    # Build the project first to ensure we have initial files
+    build_project
+    
+    # Start the Node.js server
     node server.js
 }
 

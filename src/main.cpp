@@ -66,14 +66,19 @@ void mainLoop() {
 
 // Handle key presses to change frequency
 EM_BOOL keyDownCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userData) {
+    // Only handle arrow keys, let other keys pass through to the browser
     if (strcmp(e->key, "ArrowUp") == 0) {
         frequency *= 1.05f;  // Increase pitch
         std::cout << "Frequency: " << frequency << " Hz" << std::endl;
+        return EM_TRUE; // Prevent default browser behavior for this key
     } else if (strcmp(e->key, "ArrowDown") == 0) {
         frequency /= 1.05f;  // Decrease pitch
         std::cout << "Frequency: " << frequency << " Hz" << std::endl;
+        return EM_TRUE; // Prevent default browser behavior for this key
     }
-    return EM_TRUE;
+    
+    // Let all other keys pass through to the browser
+    return EM_FALSE;
 }
 
 // Export functions to JavaScript

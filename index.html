@@ -7,6 +7,11 @@
     <!-- CodeMirror CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
+    <!-- CodeMirror JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/comment/comment.min.js"></script>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -86,6 +91,52 @@
         background-color: #cccccc;
         cursor: not-allowed;
       }
+      #editor-container {
+        max-width: 800px;
+        margin: 20px auto;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      }
+      .editor-header {
+        background-color: #2c3e50;
+        color: white;
+        padding: 10px 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .editor-title {
+        font-weight: bold;
+        margin: 0;
+      }
+      .editor-actions {
+        display: flex;
+        gap: 10px;
+      }
+      .editor-button {
+        background-color: #3498db;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 5px 10px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .editor-button:hover {
+        background-color: #2980b9;
+      }
+      .editor-button.save {
+        background-color: #27ae60;
+      }
+      .editor-button.save:hover {
+        background-color: #219955;
+      }
+      .CodeMirror {
+        height: 400px;
+        font-family: monospace;
+        font-size: 14px;
+      }
     </style>
   </head>
   <body>
@@ -96,6 +147,18 @@
       <button id="rebuildButton" class="button" disabled>Rebuild Module</button>
       <p>Use the arrow keys to change the frequency:</p>
       <p>↑ - Increase pitch | ↓ - Decrease pitch</p>
+    </div>
+
+    <!-- Code Editor Section -->
+    <div id="editor-container">
+      <div class="editor-header">
+        <div class="editor-title">Edit main.cpp</div>
+        <div class="editor-actions">
+          <button id="saveButton" class="editor-button save">Save</button>
+          <button id="saveAndRebuildButton" class="editor-button">Save & Rebuild</button>
+        </div>
+      </div>
+      <textarea id="code-editor"></textarea>
     </div>
 
     <div class="emscripten" id="status">Downloading...</div>
@@ -207,8 +270,10 @@
             startAudioButton.textContent = "Stop Audio";
             audioStarted = true;
             
-            // Focus the canvas for keyboard events
-            document.getElementById('canvas').focus();
+            // Only focus the canvas for keyboard events if the editor is not active
+            if (!editorActive) {
+              document.getElementById('canvas').focus();
+            }
           } catch (e) {
             console.error("Error starting audio context:", e);
             alert("Failed to start audio. Your browser may not support WebAudio API.");
@@ -290,6 +355,127 @@
           if (text) console.error('[post-exception status] ' + text);
         };
       };
+
+      // CodeMirror Editor Setup
+      let editor;
+      let originalCode = '';
+      let editorActive = false; // Track if editor is active
+
+      // Initialize the CodeMirror editor after the page loads
+      window.addEventListener('load', function() {
+        // Create CodeMirror instance
+        editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
+          mode: 'text/x-c++src',
+          theme: 'monokai',
+          lineNumbers: true,
+          matchBrackets: true,
+          indentUnit: 4,
+          tabSize: 4,
+          indentWithTabs: false,
+          autoCloseBrackets: true
+        });
+
+        // Load the source code from the server
+        loadSourceCode();
+        
+        // Handle editor focus events
+        editor.on('focus', function() {
+          editorActive = true;
+          console.log('Editor focused, keyboard input directed to CodeMirror');
+          
+          // Pause emscripten's keyboard events
+          if (Module.canvas) {
+            Module.canvas.blur();
+          }
+        });
+        
+        editor.on('blur', function() {
+          editorActive = false;
+          console.log('Editor blurred, keyboard input restored to canvas');
+          
+          // Restore focus to canvas for SDL keyboard events
+          if (Module.canvas) {
+            Module.canvas.focus();
+          }
+        });
+        
+        // Manually blur the canvas when clicking on the editor
+        document.getElementById('editor-container').addEventListener('mousedown', function(e) {
+          if (Module.canvas) {
+            Module.canvas.blur();
+          }
+        });
+      });
+
+      // Function to load the source code from the server
+      function loadSourceCode() {
+        fetch('http://localhost:3000/source')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            return response.text();
+          })
+          .then(code => {
+            originalCode = code;
+            editor.setValue(code);
+            console.log('Source code loaded successfully');
+          })
+          .catch(error => {
+            console.error('Error loading source code:', error);
+            alert('Failed to load source code. Make sure the server is running.');
+          });
+      }
+
+      // Function to save the source code to the server
+      function saveSourceCode() {
+        const code = editor.getValue();
+        
+        fetch('http://localhost:3000/update-source', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ content: code }),
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            console.log('Source code saved successfully');
+            originalCode = code;
+          } else {
+            console.error('Error saving source code:', data.error);
+            alert('Failed to save source code: ' + data.error);
+          }
+        })
+        .catch(error => {
+          console.error('Error saving source code:', error);
+          alert('Failed to save source code. Make sure the server is running.');
+        });
+      }
+
+      // Handle the save button click
+      document.getElementById('saveButton').addEventListener('click', function() {
+        saveSourceCode();
+      });
+
+      // Handle the save and rebuild button click
+      document.getElementById('saveAndRebuildButton').addEventListener('click', function() {
+        saveSourceCode();
+        
+        // Wait a moment to ensure the save completes, then rebuild
+        setTimeout(() => {
+          rebuildButton.click();
+        }, 500);
+      });
+
+      // Add a keyboard shortcut (Ctrl+S) for saving
+      editor && editor.setOption('extraKeys', {
+        'Ctrl-S': function() {
+          saveSourceCode();
+          return false;
+        }
+      });
     </script>
     {{{ SCRIPT }}}
   </body>
