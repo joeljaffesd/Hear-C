@@ -4,6 +4,9 @@
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>Hear-C: SDL2 Audio Demo</title>
+    <!-- CodeMirror CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -53,21 +56,33 @@
         display: inline-block;
         margin-left: 20px;
       }
-      #startAudio {
+      .button {
         padding: 10px 20px;
         font-size: 16px;
-        background-color: #4CAF50;
         color: white;
         border: none;
         border-radius: 4px;
         cursor: pointer;
-        margin: 20px auto;
-        display: block;
+        margin: 10px;
+        display: inline-block;
+      }
+      #startAudio {
+        background-color: #4CAF50;
       }
       #startAudio:hover {
         background-color: #45a049;
       }
       #startAudio:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      #rebuildButton {
+        background-color: #3498db;
+      }
+      #rebuildButton:hover {
+        background-color: #2980b9;
+      }
+      #rebuildButton:disabled {
         background-color: #cccccc;
         cursor: not-allowed;
       }
@@ -77,7 +92,8 @@
     <h1 style="text-align: center;">Hear-C: SDL2 Audio Demo</h1>
     
     <div id="controls">
-      <button id="startAudio" disabled>Start Audio</button>
+      <button id="startAudio" class="button" disabled>Start Audio</button>
+      <button id="rebuildButton" class="button" disabled>Rebuild Module</button>
       <p>Use the arrow keys to change the frequency:</p>
       <p>↑ - Increase pitch | ↓ - Decrease pitch</p>
     </div>
@@ -98,6 +114,7 @@
       var progressElement = document.getElementById('progress');
       var outputElement = document.getElementById('output');
       var startAudioButton = document.getElementById('startAudio');
+      var rebuildButton = document.getElementById('rebuildButton');
       var audioContext = null;
       var audioStarted = false;
 
@@ -217,6 +234,54 @@
             console.error("Error stopping audio:", e);
           }
         }
+      });
+      
+      // Handle the rebuild button
+      rebuildButton.addEventListener('click', function() {
+        console.log("Rebuild button clicked");
+        rebuildButton.disabled = true;
+        rebuildButton.textContent = "Building...";
+        
+        // Make a request to the rebuild server
+        fetch('http://localhost:3000/rebuild', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ rebuild: true }),
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log("Rebuild response:", data);
+          if (data.success) {
+            alert("Build successful! Refreshing page...");
+            // Reload the page to get the new build
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            alert("Build failed. Check console for details.");
+            rebuildButton.textContent = "Rebuild Failed";
+          }
+        })
+        .catch(error => {
+          console.error("Error during rebuild:", error);
+          alert("Error during rebuild. Make sure the rebuild server is running.");
+          rebuildButton.textContent = "Rebuild Error";
+        })
+        .finally(() => {
+          setTimeout(() => {
+            rebuildButton.disabled = false;
+            rebuildButton.textContent = "Rebuild Module";
+          }, 3000);
+        });
+      });
+      
+      // Enable rebuild button after page load
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          rebuildButton.disabled = false;
+        }, 1000);
       });
       
       window.onerror = function() {

@@ -5,6 +5,8 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 
 1. Clone this repo
 
-2. Make sure you have `emcc` and `python`/`python3` installed and in path
+2. Make sure you have `emcc`, `python`/`python3`, and `node` installed and in path
 
 3. In a Bash shell do `./run.sh`, or use `SHIFT`+`CMD`+`B` in VSCode
+
+4. Open a second shell and do `./run.sh rebuild`
