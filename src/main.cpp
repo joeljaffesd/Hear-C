@@ -4,6 +4,8 @@
 #include <iostream>
 #include <cmath>
 
+#include "user.h"
+
 // Audio parameters
 constexpr int SAMPLE_RATE = 44100;
 constexpr int BUFFER_SIZE = 1024;  // Buffer size in samples
@@ -12,7 +14,6 @@ constexpr int CHANNELS = 2;        // Stereo
 // Global audio state
 SDL_AudioDeviceID audioDevice;
 float phase = 0.0f;
-float frequency = 440.0f;  // A4 note in Hz
 float volume = 0.5f;
 bool mainLoopInitialized = false;
 

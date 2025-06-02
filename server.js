@@ -84,7 +84,7 @@ const server = http.createServer((req, res) => {
   // Handle GET request for main.cpp content
   if (req.method === 'GET' && req.url === '/source') {
     try {
-      const content = fs.readFileSync(path.join(__dirname, 'src', 'main.cpp'), 'utf8');
+      const content = fs.readFileSync(path.join(__dirname, 'src', 'user.h'), 'utf8');
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end(content);
     } catch (error) {
@@ -106,7 +106,7 @@ const server = http.createServer((req, res) => {
       try {
         const { content } = JSON.parse(body);
         
-        fs.writeFileSync(path.join(__dirname, 'src', 'main.cpp'), content);
+        fs.writeFileSync(path.join(__dirname, 'src', 'user.h'), content);
         res.writeHead(200);
         res.end(JSON.stringify({ success: true }));
         
