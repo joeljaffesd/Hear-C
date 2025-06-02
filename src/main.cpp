@@ -4,17 +4,14 @@
 #include <iostream>
 #include <cmath>
 
-#include "user.h"
-
 // Audio parameters
-constexpr int SAMPLE_RATE = 44100;
-constexpr int BUFFER_SIZE = 1024;  // Buffer size in samples
-constexpr int CHANNELS = 2;        // Stereo
+#define SAMPLE_RATE 44100
+#define BUFFER_SIZE 1024  // Buffer size in samples
+#define CHANNELS 2        // Stereo
+#include "user.h"
 
 // Global audio state
 SDL_AudioDeviceID audioDevice;
-float phase = 0.0f;
-float volume = 0.5f;
 bool mainLoopInitialized = false;
 
 // Audio callback function - this is where the audio is generated
@@ -29,23 +26,11 @@ void audioCallback(void* userdata, Uint8* stream, int len) {
     // Fill the audio buffer
     for (int i = 0; i < samples; i++) {
         // Generate a simple sine wave
-        float sample = volume * sin(phase);
-        
+        float sample = mOsc();
         // Write to both channels for stereo
         buffer[i * CHANNELS] = sample;       // Left channel
         buffer[i * CHANNELS + 1] = sample;   // Right channel
-        
-        // Advance the phase for the next sample
-        phase += 2.0f * M_PI * frequency / SAMPLE_RATE;
-        if (phase > 2.0f * M_PI) {
-            phase -= 2.0f * M_PI;  // Keep phase in the [0, 2π] range
-        }
     }
-}
-
-// Function to change the tone frequency
-void setFrequency(float freq) {
-    frequency = freq;
 }
 
 // Main loop function required by Emscripten
@@ -54,7 +39,6 @@ void mainLoop() {
     if (!mainLoopInitialized) {
         std::cout << "Main loop started! WebAssembly is running." << std::endl;
         std::cout << "Audio device ID: " << audioDevice << std::endl;
-        std::cout << "Current frequency: " << frequency << " Hz" << std::endl;
         mainLoopInitialized = true;
     }
     
@@ -67,16 +51,22 @@ void mainLoop() {
 
 // Handle key presses to change frequency
 EM_BOOL keyDownCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userData) {
-    // Only handle arrow keys, let other keys pass through to the browser
-    if (strcmp(e->key, "ArrowUp") == 0) {
-        frequency *= 1.05f;  // Increase pitch
-        std::cout << "Frequency: " << frequency << " Hz" << std::endl;
-        return EM_TRUE; // Prevent default browser behavior for this key
-    } else if (strcmp(e->key, "ArrowDown") == 0) {
-        frequency /= 1.05f;  // Decrease pitch
-        std::cout << "Frequency: " << frequency << " Hz" << std::endl;
-        return EM_TRUE; // Prevent default browser behavior for this key
-    }
+
+    //=======================================================================
+
+    // EXAMPLE Event Handling:
+
+    // if (strcmp(e->key, "ArrowUp") == 0) {
+    //     frequency *= 1.05f;  // Increase pitch
+    //     std::cout << "Frequency: " << frequency << " Hz" << std::endl;
+    //     return EM_TRUE; // Prevent default browser behavior for this key
+    // } else if (strcmp(e->key, "ArrowDown") == 0) {
+    //     frequency /= 1.05f;  // Decrease pitch
+    //     std::cout << "Frequency: " << frequency << " Hz" << std::endl;
+    //     return EM_TRUE; // Prevent default browser behavior for this key
+    // }
+
+    //=======================================================================
     
     // Let all other keys pass through to the browser
     return EM_FALSE;
