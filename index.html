@@ -137,6 +137,27 @@
         font-family: monospace;
         font-size: 14px;
       }
+      /* Prevent unwanted page jumps */
+      html {
+        scroll-behavior: smooth;
+        height: 100%;
+        overflow-y: auto;
+      }
+      body {
+        min-height: 100%;
+        overflow-y: scroll;
+        /* Prevent content shifts by always showing scrollbar */
+        padding-left: calc(100vw - 100%);
+      }
+      /* Prevent focus outlines on buttons that might cause layout shifts */
+      button:focus {
+        outline: none;
+      }
+      /* Fix the controls position to prevent jumps */
+      #controls {
+        position: relative;
+        z-index: 2;
+      }
     </style>
   </head>
   <body>
@@ -154,8 +175,8 @@
       <div class="editor-header">
         <div class="editor-title">Edit user.h</div>
         <div class="editor-actions">
-          <button id="saveButton" class="editor-button save">Save</button>
-          <button id="saveAndRebuildButton" class="editor-button">Save & Rebuild</button>
+          <button id="saveButton" class="editor-button save" type="button">Save</button>
+          <button id="saveAndRebuildButton" class="editor-button" type="button">Save & Rebuild</button>
         </div>
       </div>
       <textarea id="code-editor"></textarea>
@@ -244,7 +265,14 @@
       Module.setStatus('Downloading...');
       
       // Handle the audio button (start/stop)
-      startAudioButton.addEventListener('click', function() {
+      startAudioButton.addEventListener('click', function(event) {
+        // Prevent default button behavior to avoid page scrolling
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // Store current scroll position
+        const scrollPosition = window.scrollY;
+        
         if (!audioStarted) {
           // START AUDIO
           try {
@@ -272,7 +300,10 @@
             
             // Only focus the canvas for keyboard events if the editor is not active
             if (!editorActive) {
-              document.getElementById('canvas').focus();
+              // Use setTimeout to avoid layout shifts during focus change
+              setTimeout(() => {
+                document.getElementById('canvas').focus();
+              }, 0);
             }
           } catch (e) {
             console.error("Error starting audio context:", e);
@@ -299,10 +330,23 @@
             console.error("Error stopping audio:", e);
           }
         }
+        
+        // Restore scroll position
+        setTimeout(() => {
+          window.scrollTo({
+            top: scrollPosition,
+            behavior: 'instant' // Use 'instant' to prevent smooth scrolling animation
+          });
+        }, 0);
+        
+        return false;
       });
       
       // Handle the rebuild button
-      rebuildButton.addEventListener('click', function() {
+      rebuildButton.addEventListener('click', function(event) {
+        // Prevent default button behavior to avoid page scrolling
+        event.preventDefault();
+        
         console.log("Rebuild button clicked");
         rebuildButton.disabled = true;
         rebuildButton.textContent = "Building...";
@@ -455,12 +499,17 @@
       }
 
       // Handle the save button click
-      document.getElementById('saveButton').addEventListener('click', function() {
+      document.getElementById('saveButton').addEventListener('click', function(event) {
+        // Prevent default button behavior to avoid page scrolling
+        event.preventDefault();
         saveSourceCode();
       });
 
       // Handle the save and rebuild button click
-      document.getElementById('saveAndRebuildButton').addEventListener('click', function() {
+      document.getElementById('saveAndRebuildButton').addEventListener('click', function(event) {
+        // Prevent default button behavior to avoid page scrolling
+        event.preventDefault();
+        
         saveSourceCode();
         
         // Wait a moment to ensure the save completes, then rebuild
