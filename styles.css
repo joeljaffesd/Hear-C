@@ -1,0 +1,235 @@
+/* Main styles for Hear-C application */
+
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background-color: #f5f5f5;
+  min-height: 100%;
+  overflow-y: scroll;
+  /* Prevent content shifts by always showing scrollbar */
+  padding-left: calc(100vw - 100%);
+}
+
+/* Prevent unwanted page jumps */
+html {
+  scroll-behavior: smooth;
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* Emscripten elements */
+.emscripten {
+  padding: 0;
+  margin: 0 auto;
+  display: block;
+}
+
+textarea.emscripten {
+  resize: none;
+  width: 80%;
+  height: 150px;
+  border: 1px solid #999;
+  padding: 5px;
+  font-family: monospace;
+}
+
+div.emscripten {
+  text-align: center;
+  margin-top: 20px;
+}
+
+.emscripten_border {
+  margin-top: 20px;
+}
+
+/* Loading spinner */
+.spinner {
+  height: 30px;
+  width: 30px;
+  margin: 0 auto;
+  animation: rotation 1.5s linear infinite;
+  border: 6px solid #3498db;
+  border-top: 6px solid #f5f5f5;
+  border-radius: 100%;
+}
+
+@keyframes rotation {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Controls section */
+#controls {
+  margin: 20px auto;
+  max-width: 800px;
+  text-align: center;
+  padding: 10px;
+  background-color: #e0e0e0;
+  border-radius: 8px;
+  position: relative;
+  z-index: 2;
+}
+
+#status {
+  display: inline-block;
+  margin-left: 20px;
+}
+
+/* Button styles */
+.button {
+  padding: 10px 20px;
+  font-size: 16px;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 10px;
+  display: inline-block;
+}
+
+#startAudio {
+  background-color: #4CAF50;
+}
+
+#startAudio:hover {
+  background-color: #45a049;
+}
+
+#startAudio:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+#rebuildButton {
+  background-color: #3498db;
+}
+
+#rebuildButton:hover {
+  background-color: #2980b9;
+}
+
+#rebuildButton:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+/* Prevent focus outlines on buttons that might cause layout shifts */
+button:focus {
+  outline: none;
+}
+
+/* Code editor container */
+#editor-container {
+  max-width: 800px;
+  margin: 20px auto;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.editor-header {
+  background-color: #2c3e50;
+  color: white;
+  padding: 10px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-title {
+  font-weight: bold;
+  margin: 0;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.editor-button {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.editor-button:hover {
+  background-color: #2980b9;
+}
+
+.editor-button.save {
+  background-color: #27ae60;
+}
+
+.editor-button.save:hover {
+  background-color: #219955;
+}
+
+/* CodeMirror styling */
+.CodeMirror {
+  height: 400px;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+/* Output console styling */
+#output {
+  margin-top: 10px;
+  margin-bottom: 20px;
+  max-width: 800px;
+  width: 100%;
+  border-radius: 0 0 8px 8px;
+  border-top: none;
+  background-color: #2c3e50;
+  color: #f1f1f1;
+  font-family: monospace;
+}
+
+/* Error display styling */
+#error-container {
+  max-width: 800px;
+  margin: 10px auto;
+  border-radius: 8px;
+  overflow: hidden;
+  display: none;
+}
+
+#error-container.visible {
+  display: block;
+}
+
+.error-header {
+  background-color: #e74c3c;
+  color: white;
+  padding: 10px 15px;
+  font-weight: bold;
+}
+
+.error-content {
+  background-color: #f9f9f9;
+  border: 1px solid #e74c3c;
+  border-top: none;
+  padding: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.error-line {
+  margin: 2px 0;
+  padding: 2px 0;
+}
+
+.error-line.error {
+  color: #e74c3c;
+}
+
+.error-line.warning {
+  color: #f39c12;
+}

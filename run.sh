@@ -21,7 +21,11 @@ build_project() {
         --shell-file index.html \
         -O2
 
-    # 3. Show build directory contents
+    # 3. Copy static assets
+    echo "Copying static assets to build directory..."
+    cp styles.css build/
+
+    # 4. Show build directory contents
     echo "Build directory contents:"
     ls -la build
 }
