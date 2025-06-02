@@ -137,6 +137,22 @@
         font-family: monospace;
         font-size: 14px;
       }
+      /* Output console styling */
+      #output {
+        margin-top: 10px;
+        margin-bottom: 20px;
+        max-width: 800px;
+        width: 100%;
+        border-radius: 0 0 8px 8px;
+        border-top: none;
+        background-color: #2c3e50;
+        color: #f1f1f1;
+        font-family: monospace;
+      }
+      /* Adjust canvas spacing */
+      .emscripten_border {
+        margin-top: 20px;
+      }
       /* Prevent unwanted page jumps */
       html {
         scroll-behavior: smooth;
@@ -182,15 +198,16 @@
       <textarea id="code-editor"></textarea>
     </div>
 
+    <div class="emscripten">
+      <textarea class="emscripten" id="output" rows="8"></textarea>
+    </div>
+
     <div class="emscripten" id="status">Downloading...</div>
     <div class="emscripten">
       <progress value="0" max="100" id="progress" hidden></progress>  
     </div>
     <div class="emscripten_border">
       <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-    </div>
-    <div class="emscripten">
-      <textarea class="emscripten" id="output" rows="8"></textarea>
     </div>
 
     <script type='text/javascript'>
