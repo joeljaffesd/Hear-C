@@ -47,10 +47,7 @@ start_rebuild_server() {
 # Check command line arguments
 if [ "$1" == "build" ]; then
   build_project
-elif [ "$1" == "serve" ]; then
-  start_rebuild_server
 else
   # Default: build && serve
-  build_project
   start_rebuild_server
 fi
