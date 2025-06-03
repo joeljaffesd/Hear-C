@@ -5,8 +5,10 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 
 1. Clone this repo
 
-2. Make sure you have `emcc` and `node` installed and in path
+2. If you want to build without Docker, make sure you have `emcc` and `node` installed and in path
 
-3. In a Bash shell do `./run.sh`, or use `SHIFT`+`CMD`+`B` in VSCode
+3. To build locally, do `./run.sh` in a Bash shell or use `SHIFT`+`CMD`+`B` in VSCode. 
+
+    To build with Docker do: `docker build -t Hear-C . && docker run --publish 3000:3000 Hear-C`
 
 4. Navigate to http://localhost:3000/ with your favorite browser
