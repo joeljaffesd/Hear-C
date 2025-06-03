@@ -24,6 +24,7 @@ build_project() {
   # 3. Copy static assets
   echo "Copying static assets to build directory..."
   cp styles.css build/
+  cp logo.ico build/
 
   # 4. Show build directory contents
   echo "Build directory contents:"
