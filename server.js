@@ -57,6 +57,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Health check endpoint for Railway/hosting platforms
+  if (req.method === 'GET' && req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+    return;
+  }
+
   // Handle rebuild request
   if (req.method === 'POST' && req.url === '/rebuild') {
     console.log('Rebuild request received');
@@ -215,9 +222,9 @@ const server = http.createServer((req, res) => {
 });
 
 // Start the server
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n==== Hear-C Server ====`);
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running at http://0.0.0.0:${PORT}`);
   console.log(`- Access the app at http://localhost:${PORT}/`);
   console.log(`- Edit code in the browser with the code editor`);
   console.log(`- Use the "Rebuild" button to recompile after changes`);
