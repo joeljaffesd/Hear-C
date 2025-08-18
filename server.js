@@ -5,7 +5,7 @@ const path = require('path');
 const url = require('url');
 
 // Configure the port for the API server
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // MIME types for serving static files
 const MIME_TYPES = {
