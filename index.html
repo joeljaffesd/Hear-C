@@ -13,24 +13,65 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <h1 style="text-align: center;">Hear-C: Browser-Based C++ Audio Development</h1>
-    
-    <div id="controls">
-      <button id="startAudio" class="button" disabled>Start Audio</button>
-      <button id="rebuildButton" class="button" disabled>Rebuild Module</button>
-    </div>
-
-    <!-- Code Editor Section -->
-    <div id="editor-container">
-      <div class="editor-header">
-        <div class="editor-title">Edit user.h (saved in browser)</div>
-        <div class="editor-actions">
-          <button id="resetButton" class="editor-button reset" type="button">Reset to Default</button>
-          <button id="saveButton" class="editor-button save" type="button">Save</button>
-          <button id="saveAndRebuildButton" class="editor-button" type="button">Save & Rebuild</button>
+    <!-- Main IDE Layout inspired by Faust IDE -->
+    <div class="ide-layout">
+      <!-- Header -->
+      <div class="header">
+        <h1>Hear-C: Browser-Based C++ Audio Development</h1>
+      </div>
+      
+      <!-- Main Content Area -->
+      <div class="main-content">
+        <!-- Center: Code Editor -->
+        <div class="editor-section">
+          <div class="editor-header">
+            <div class="editor-title">user.h</div>
+            <div class="editor-status" id="editor-status">Ready</div>
+          </div>
+          <div id="monaco-editor"></div>
+        </div>
+        
+        <!-- Right Panel: Controls -->
+        <div class="right-panel">
+          <div class="panel-section">
+            <h3>Build & Run</h3>
+            <div class="control-group">
+              <button id="saveButton" class="panel-button save" type="button">
+                💾 Save
+              </button>
+              <button id="rebuildButton" class="panel-button build" disabled>
+                🔨 Build & Run
+              </button>
+              <button id="resetButton" class="panel-button reset" type="button">
+                🔄 Reset to Default
+              </button>
+            </div>
+          </div>
+          
+          <div class="panel-section">
+            <h3>Audio Control</h3>
+            <div class="control-group">
+              <button id="startAudio" class="panel-button audio" disabled>
+                ▶️ Start Audio
+              </button>
+            </div>
+          </div>
+          
         </div>
       </div>
-      <div id="monaco-editor"></div>
+      
+      <!-- Bottom Panel: Console Output -->
+      <div class="bottom-panel">
+        <div class="console-header">
+          <h3>Console Output</h3>
+          <div class="console-controls">
+            <button id="clearConsole" class="console-button">🗑️ Clear</button>
+          </div>
+        </div>
+        <div class="console-content">
+          <textarea id="output" readonly placeholder="Build output and messages will appear here..."></textarea>
+        </div>
+      </div>
     </div>
 
     <!-- Error display container for compilation errors -->
@@ -39,24 +80,17 @@
       <div class="error-content" id="error-content"></div>
     </div>
 
-    <div class="emscripten">
-      <textarea class="emscripten" id="output" rows="8" readonly></textarea>
-    </div>
-
-    <div class="emscripten" id="status">Downloading...</div>
-    <div class="emscripten">
+    <!-- Hidden Emscripten Elements -->
+    <div class="emscripten" style="display: none;">
+      <div id="status">Downloading...</div>
       <progress value="0" max="100" id="progress" hidden></progress>  
-    </div>
-    <div class="emscripten_border">
-      <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+      <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
     </div>
 
     <script type='text/javascript'>
       var statusElement = document.getElementById('status');
       var progressElement = document.getElementById('progress');
       var outputElement = document.getElementById('output');
-      var startAudioButton = document.getElementById('startAudio');
-      var rebuildButton = document.getElementById('rebuildButton');
       var audioContext = null;
       var audioStarted = false;
 
@@ -95,10 +129,17 @@
             progressElement.max = null;
             progressElement.hidden = true;
             
-            // Enable the audio button when status indicates loading is complete
+            // Enable buttons when status indicates loading is complete
             if (text === 'All downloads complete.') {
-              console.log("Enabling audio button");
-              startAudioButton.disabled = false;
+              console.log("Enabling audio and rebuild buttons");
+              const audioButton = document.getElementById('startAudio');
+              const rebuildButton = document.getElementById('rebuildButton');
+              if (audioButton) {
+                audioButton.disabled = false;
+              }
+              if (rebuildButton) {
+                rebuildButton.disabled = false;
+              }
             }
           }
           statusElement.innerHTML = text;
@@ -110,207 +151,13 @@
         }
       };
       
-      // Also enable the button when the module is fully loaded
-      window.addEventListener('load', function() {
-        setTimeout(function() {
-          if (startAudioButton.disabled) {
-            console.log("Enabling audio button after page load");
-            startAudioButton.disabled = false;
-          }
-        }, 3000); // Give it 3 seconds after page load as a fallback
-      });
+
       
       Module.setStatus('Downloading...');
       
-      // Handle the audio button (start/stop)
-      startAudioButton.addEventListener('click', function(event) {
-        // Prevent default button behavior to avoid page scrolling
-        event.preventDefault();
-        event.stopPropagation();
-        
-        // Store current scroll position
-        const scrollPosition = window.scrollY;
-        
-        if (!audioStarted) {
-          // START AUDIO
-          try {
-            window.AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioContext = new AudioContext();
-            
-            // For SDL2 audio, we need to resume the context
-            if (audioContext.state === 'suspended') {
-              audioContext.resume();
-            }
-            
-            // This is a special function that SDL2 will use
-            window.SDL2 = window.SDL2 || {};
-            window.SDL2.audioContext = audioContext;
-            
-            // Call our C++ function to start the audio
-            if (Module && typeof Module.ccall === 'function') {
-              console.log("Starting audio...");
-              Module.ccall('startAudio', null, [], []);
-            }
-            
-            console.log("Audio context started successfully");
-            startAudioButton.textContent = "Stop Audio";
-            audioStarted = true;
-            
-            // Only focus the canvas for keyboard events if the editor is not active
-            if (!editorActive) {
-              // Use setTimeout to avoid layout shifts during focus change
-              setTimeout(() => {
-                document.getElementById('canvas').focus();
-              }, 0);
-            }
-          } catch (e) {
-            console.error("Error starting audio context:", e);
-            alert("Failed to start audio. Your browser may not support WebAudio API.");
-          }
-        } else {
-          // STOP AUDIO
-          try {
-            // Call our C++ function to stop the audio
-            if (Module && typeof Module.ccall === 'function') {
-              console.log("Stopping audio...");
-              Module.ccall('stopAudio', null, [], []);
-            }
-            
-            // Optionally suspend the audio context
-            if (audioContext && audioContext.state === 'running') {
-              audioContext.suspend();
-            }
-            
-            console.log("Audio stopped successfully");
-            startAudioButton.textContent = "Start Audio";
-            audioStarted = false;
-          } catch (e) {
-            console.error("Error stopping audio:", e);
-          }
-        }
-        
-        // Restore scroll position
-        setTimeout(() => {
-          window.scrollTo({
-            top: scrollPosition,
-            behavior: 'instant' // Use 'instant' to prevent smooth scrolling animation
-          });
-        }, 0);
-        
-        return false;
-      });
+
       
-      // Handle the rebuild button
-      rebuildButton.addEventListener('click', function(event) {
-        // Prevent default button behavior to avoid page scrolling
-        event.preventDefault();
-        
-        // Store current scroll position
-        const scrollPosition = window.scrollY;
-        
-        console.log("Rebuild button clicked");
-        rebuildButton.disabled = true;
-        rebuildButton.textContent = "Building...";
-        
-        // Hide any previous error display
-        document.getElementById('error-container').classList.remove('visible');
-        
-        // Get the current code from the editor
-        const currentCode = editor.getValue();
-        
-        // Make a request to the rebuild server with the current code
-        fetch('/rebuild', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            rebuild: true,
-            code: currentCode 
-          }),
-        })
-        .then(response => response.json())
-        .then(data => {
-          console.log("Rebuild response:", data);
-          
-          if (data.success) {
-            // Build successful
-            document.getElementById('error-container').classList.remove('visible');
-            alert("Build successful! Refreshing page...");
-            // Reload the page to get the new build
-            setTimeout(() => {
-              window.location.reload();
-            }, 1000);
-          } else {
-            // Build failed - display errors
-            console.error("Build failed:", data.error);
-            
-            // Show error container
-            const errorContainer = document.getElementById('error-container');
-            const errorContent = document.getElementById('error-content');
-            
-            // Clear previous errors
-            errorContent.innerHTML = '';
-            
-            // Add error details
-            if (data.errorDetails && data.errorDetails.length) {
-              data.errorDetails.forEach(error => {
-                const errorLine = document.createElement('div');
-                errorLine.className = 'error-line error';
-                errorLine.textContent = error;
-                errorContent.appendChild(errorLine);
-              });
-            } else if (data.stderr) {
-              // If no parsed errors, show raw stderr
-              const stderrLines = data.stderr.split('\n');
-              stderrLines.forEach(line => {
-                const errorLine = document.createElement('div');
-                if (line.includes('error:')) {
-                  errorLine.className = 'error-line error';
-                } else if (line.includes('warning:')) {
-                  errorLine.className = 'error-line warning';
-                } else {
-                  errorLine.className = 'error-line';
-                }
-                errorLine.textContent = line;
-                errorContent.appendChild(errorLine);
-              });
-            }
-            
-            // Make the error container visible
-            errorContainer.classList.add('visible');
-            
-            // Update button
-            rebuildButton.textContent = "Rebuild Failed";
-          }
-        })
-        .catch(error => {
-          console.error("Error during rebuild:", error);
-          alert("Error during rebuild. Make sure the rebuild server is running.");
-          rebuildButton.textContent = "Rebuild Error";
-        })
-        .finally(() => {
-          // Restore scroll position
-          window.scrollTo({
-            top: scrollPosition,
-            behavior: 'instant'
-          });
-          
-          setTimeout(() => {
-            rebuildButton.disabled = false;
-            if (rebuildButton.textContent === "Building...") {
-              rebuildButton.textContent = "Rebuild Module";
-            }
-          }, 3000);
-        });
-      });
-      
-      // Enable rebuild button after page load
-      window.addEventListener('load', function() {
-        setTimeout(function() {
-          rebuildButton.disabled = false;
-        }, 1000);
-      });
+
       
       window.onerror = function() {
         Module.setStatus('Exception thrown, see JavaScript console');
@@ -366,6 +213,17 @@
             }
           });
 
+          // Handle window resize and zoom changes
+          let resizeTimeout;
+          window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+              if (editor) {
+                editor.layout();
+              }
+            }, 100);
+          });
+
           // Load the source code (from localStorage or server default)
           loadSourceCode();
 
@@ -399,7 +257,7 @@
         });
         
         // Manually blur the canvas when clicking on the editor
-        document.getElementById('editor-container').addEventListener('mousedown', function(e) {
+        document.getElementById('monaco-editor').addEventListener('mousedown', function(e) {
           if (Module.canvas) {
             Module.canvas.blur();
           }
@@ -470,45 +328,297 @@
         }
       }
 
-      // Handle the save button click
-      document.getElementById('saveButton').addEventListener('click', function(event) {
-        // Prevent default button behavior to avoid page scrolling
-        event.preventDefault();
-        saveSourceCode();
-      });
+      // Initialize UI on load
+      window.addEventListener('load', function() {
+        updateEditorStatus('Ready');
+        
+        // Handle clear console button
+        document.getElementById('clearConsole').addEventListener('click', function(event) {
+          event.preventDefault();
+          document.getElementById('output').value = '';
+          updateEditorStatus('Console cleared');
+          setTimeout(() => {
+            updateEditorStatus('Ready');
+          }, 2000);
+        });
 
-      // Handle the save and rebuild button click
-      document.getElementById('saveAndRebuildButton').addEventListener('click', function(event) {
-        // Prevent default button behavior to avoid page scrolling
-        event.preventDefault();
-        
-        // Save to localStorage first
-        saveSourceCode();
-        
-        // Then rebuild immediately (no need to wait since we're not saving to server)
-        rebuildButton.click();
+        // Handle the save button click
+        document.getElementById('saveButton').addEventListener('click', function(event) {
+          event.preventDefault();
+          saveSourceCode();
+        });
+
+        // Handle the reset button click
+        document.getElementById('resetButton').addEventListener('click', function(event) {
+          event.preventDefault();
+          if (confirm('Reset to default code? This will lose your current changes.')) {
+            resetToDefault();
+          }
+        });
+
+        // Handle the audio button (start/stop)
+        document.getElementById('startAudio').addEventListener('click', function(event) {
+          event.preventDefault();
+          event.stopPropagation();
+          
+          if (!audioStarted) {
+            // START AUDIO
+            try {
+              window.AudioContext = window.AudioContext || window.webkitAudioContext;
+              audioContext = new AudioContext();
+              
+              if (audioContext.state === 'suspended') {
+                audioContext.resume();
+              }
+              
+              window.SDL2 = window.SDL2 || {};
+              window.SDL2.audioContext = audioContext;
+              
+              // Call the WebAssembly startAudio function
+              if (typeof Module !== 'undefined' && Module._startAudio) {
+                console.log("Calling WebAssembly startAudio function");
+                Module._startAudio();
+              } else {
+                console.warn("WebAssembly startAudio function not available");
+              }
+              
+              audioStarted = true;
+              document.getElementById('startAudio').textContent = '⏸️ Stop Audio';
+              console.log("Audio context started and WebAssembly audio initiated");
+            } catch (error) {
+              console.error("Error starting audio:", error);
+              alert("Error starting audio. Check browser console for details.");
+            }
+          } else {
+            // STOP AUDIO
+            try {
+              // Call the WebAssembly stopAudio function
+              if (typeof Module !== 'undefined' && Module._stopAudio) {
+                console.log("Calling WebAssembly stopAudio function");
+                Module._stopAudio();
+              } else {
+                console.warn("WebAssembly stopAudio function not available");
+              }
+              
+              if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+              }
+              
+              audioStarted = false;
+              document.getElementById('startAudio').textContent = '▶️ Start Audio';
+              console.log("Audio stopped and WebAssembly audio terminated");
+            } catch (error) {
+              console.error("Error stopping audio:", error);
+            }
+          }
+        });
+
+        // Handle the rebuild button click
+        document.getElementById('rebuildButton').addEventListener('click', function(event) {
+          event.preventDefault();
+          rebuildFromBrowser();
+        });
       });
       
       // Function to reset code to default
       function resetToDefault() {
-        const defaultCode = localStorage.getItem(DEFAULT_CODE_KEY);
-        if (defaultCode) {
-          editor.setValue(defaultCode);
-          localStorage.removeItem(STORAGE_KEY); // Clear saved code
-          console.log('Code reset to default');
+        // Clear saved code from localStorage
+        localStorage.removeItem(STORAGE_KEY);
+        
+        // Check if we have cached default code first
+        const cachedDefault = localStorage.getItem(DEFAULT_CODE_KEY);
+        
+        if (cachedDefault && editor) {
+          // Use cached default if available
+          editor.setValue(cachedDefault);
+          console.log('Code reset to cached default');
+          updateEditorStatus('Reset to default');
+          setTimeout(() => {
+            updateEditorStatus('Ready');
+          }, 2000);
         } else {
-          // Reload default from server if not cached
-          loadSourceCode();
+          // Fetch fresh default from server
+          console.log('Fetching default code from server');
+          updateEditorStatus('Loading default...', false);
+          
+          fetch('/source')
+            .then(response => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+              }
+              return response.text();
+            })
+            .then(code => {
+              if (editor) {
+                editor.setValue(code);
+                // Cache the default code for future use
+                localStorage.setItem(DEFAULT_CODE_KEY, code);
+                console.log('Code reset to server default');
+                updateEditorStatus('Reset to default');
+                setTimeout(() => {
+                  updateEditorStatus('Ready');
+                }, 2000);
+              } else {
+                throw new Error('Editor not available');
+              }
+            })
+            .catch(error => {
+              console.error('Error loading default code:', error);
+              updateEditorStatus('Reset failed', true);
+              alert('Failed to load default code from server. Please check your connection.');
+              setTimeout(() => {
+                updateEditorStatus('Ready');
+              }, 3000);
+            });
         }
       }
 
-      // Handle the reset button click
-      document.getElementById('resetButton').addEventListener('click', function(event) {
-        event.preventDefault();
-        if (confirm('Reset to default code? This will lose your current changes.')) {
-          resetToDefault();
+
+
+      // Function to update editor status
+      function updateEditorStatus(message, isError = false) {
+        const statusElement = document.getElementById('editor-status');
+        if (statusElement) {
+          statusElement.textContent = message;
+          statusElement.style.color = isError ? '#ff7b72' : '#4ec9b0';
         }
-      });
+      }
+
+      // Update status messages throughout the application
+      function updateBuildStatus() {
+        updateEditorStatus('Building...', false);
+      }
+
+      // Enhanced error display
+      function showError(errorMessage) {
+        updateEditorStatus('Build failed', true);
+        
+        const errorContainer = document.getElementById('error-container');
+        const errorContent = document.getElementById('error-content');
+        
+        errorContainer.classList.add('visible');
+        errorContent.innerHTML = errorMessage.replace(/\n/g, '<br>');
+        
+        // Auto-hide after 10 seconds
+        setTimeout(() => {
+          errorContainer.classList.remove('visible');
+        }, 10000);
+      }
+
+      // Function to handle rebuild from browser
+      function rebuildFromBrowser() {
+        const rebuildButton = document.getElementById('rebuildButton');
+        
+        // Store current scroll position
+        const scrollPosition = window.scrollY;
+        
+        console.log("Rebuild button clicked");
+        rebuildButton.disabled = true;
+        rebuildButton.textContent = "Building...";
+        updateEditorStatus('Building...', false);
+        
+        // Hide any previous error display
+        const errorContainer = document.getElementById('error-container');
+        if (errorContainer) {
+          errorContainer.classList.remove('visible');
+        }
+        
+        // Get the current code from the editor
+        const currentCode = editor.getValue();
+        
+        // Make a request to the rebuild server with the current code
+        fetch('/rebuild', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            rebuild: true,
+            code: currentCode 
+          }),
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log("Rebuild response:", data);
+          
+          if (data.success) {
+            // Build successful
+            updateEditorStatus('Build successful! Refreshing...', false);
+            alert("Build successful! Refreshing page...");
+            // Reload the page to get the new build
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            // Build failed - display errors
+            console.error("Build failed:", data.error);
+            updateEditorStatus('Build failed', true);
+            
+            // Show error container if available
+            if (errorContainer) {
+              const errorContent = document.getElementById('error-content');
+              if (errorContent) {
+                // Clear previous errors
+                errorContent.innerHTML = '';
+                
+                // Add error details
+                if (data.errorDetails && data.errorDetails.length) {
+                  data.errorDetails.forEach(error => {
+                    const errorLine = document.createElement('div');
+                    errorLine.className = 'error-line error';
+                    errorLine.textContent = error;
+                    errorContent.appendChild(errorLine);
+                  });
+                } else if (data.stderr) {
+                  // If no parsed errors, show raw stderr
+                  const stderrLines = data.stderr.split('\n');
+                  stderrLines.forEach(line => {
+                    const errorLine = document.createElement('div');
+                    if (line.includes('error:')) {
+                      errorLine.className = 'error-line error';
+                    } else if (line.includes('warning:')) {
+                      errorLine.className = 'error-line warning';
+                    } else {
+                      errorLine.className = 'error-line';
+                    }
+                    errorLine.textContent = line;
+                    errorContent.appendChild(errorLine);
+                  });
+                }
+                
+                // Make the error container visible
+                errorContainer.classList.add('visible');
+              }
+            }
+            
+            // Update button
+            rebuildButton.textContent = "⚒️ Build & Run";
+          }
+        })
+        .catch(error => {
+          console.error("Error during rebuild:", error);
+          updateEditorStatus('Build error', true);
+          alert("Error during rebuild. Make sure the rebuild server is running.");
+          rebuildButton.textContent = "⚒️ Build & Run";
+        })
+        .finally(() => {
+          // Restore scroll position
+          window.scrollTo({
+            top: scrollPosition,
+            behavior: 'instant'
+          });
+          
+          setTimeout(() => {
+            rebuildButton.disabled = false;
+            if (rebuildButton.textContent === "Building...") {
+              rebuildButton.textContent = "⚒️ Build & Run";
+            }
+          }, 3000);
+        });
+      }
+
+
     </script>
     {{{ SCRIPT }}}
   </body>
