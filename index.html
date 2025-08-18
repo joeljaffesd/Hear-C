@@ -514,9 +514,14 @@
         const scrollPosition = window.scrollY;
         
         console.log("Rebuild button clicked");
+        
+        // Save the current code first
+        console.log("Auto-saving code before build...");
+        saveSourceCode();
+        
         rebuildButton.disabled = true;
         rebuildButton.textContent = "Building...";
-        updateEditorStatus('Building...', false);
+        updateEditorStatus('Saving & building...', false);
         
         // Hide any previous error display
         const errorContainer = document.getElementById('error-container');
