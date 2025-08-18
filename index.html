@@ -29,8 +29,9 @@
     <!-- Code Editor Section -->
     <div id="editor-container">
       <div class="editor-header">
-        <div class="editor-title">Edit user.h</div>
+        <div class="editor-title">Edit user.h (saved in browser)</div>
         <div class="editor-actions">
+          <button id="resetButton" class="editor-button reset" type="button">Reset to Default</button>
           <button id="saveButton" class="editor-button save" type="button">Save</button>
           <button id="saveAndRebuildButton" class="editor-button" type="button">Save & Rebuild</button>
         </div>
@@ -220,13 +221,19 @@
         // Hide any previous error display
         document.getElementById('error-container').classList.remove('visible');
         
-        // Make a request to the rebuild server
+        // Get the current code from the editor
+        const currentCode = editor.getValue();
+        
+        // Make a request to the rebuild server with the current code
         fetch('/rebuild', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ rebuild: true }),
+          body: JSON.stringify({ 
+            rebuild: true,
+            code: currentCode 
+          }),
         })
         .then(response => response.json())
         .then(data => {
@@ -322,6 +329,8 @@
       let editor;
       let originalCode = '';
       let editorActive = false; // Track if editor is active
+      const STORAGE_KEY = 'hear_c_user_code';
+      const DEFAULT_CODE_KEY = 'hear_c_default_code';
 
       // Initialize the CodeMirror editor after the page loads
       window.addEventListener('load', function() {
@@ -337,7 +346,7 @@
           autoCloseBrackets: true
         });
 
-        // Load the source code from the server
+        // Load the source code (from localStorage or server default)
         loadSourceCode();
         
         // Handle editor focus events
@@ -369,8 +378,21 @@
         });
       });
 
-      // Function to load the source code from the server
+      // Function to load the source code (localStorage first, then server default)
       function loadSourceCode() {
+        // Try to load from localStorage first
+        const savedCode = localStorage.getItem(STORAGE_KEY);
+        
+        if (savedCode) {
+          // Use saved code from localStorage
+          console.log('Loading code from localStorage');
+          originalCode = savedCode;
+          editor.setValue(savedCode);
+          return;
+        }
+        
+        // No saved code, load default from server
+        console.log('Loading default code from server');
         fetch('/source')
           .then(response => {
             if (!response.ok) {
@@ -381,85 +403,39 @@
           .then(code => {
             originalCode = code;
             editor.setValue(code);
-            console.log('Source code loaded successfully');
+            // Store the default code for reference
+            localStorage.setItem(DEFAULT_CODE_KEY, code);
+            console.log('Default source code loaded and cached');
           })
           .catch(error => {
             console.error('Error loading source code:', error);
-            alert('Failed to load source code. Make sure the server is running.');
+            alert('Failed to load default source code. Make sure the server is running.');
           });
       }
 
-      // Function to save the source code to the server
+      // Function to save the source code to localStorage
       function saveSourceCode() {
         const code = editor.getValue();
         
-        // Hide any previous error display
-        document.getElementById('error-container').classList.remove('visible');
-        
-        fetch('/update-source', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ content: code }),
-        })
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          if (data.success) {
-            console.log('Source code saved successfully');
-            originalCode = code;
-            
-            // Optional: Show success message
-            const saveButton = document.getElementById('saveButton');
-            const originalText = saveButton.textContent;
-            saveButton.textContent = "Saved ✓";
-            setTimeout(() => {
-              saveButton.textContent = originalText;
-            }, 1500);
-          } else {
-            console.error('Error saving source code:', data.error);
-            
-            // Show error in error container
-            const errorContainer = document.getElementById('error-container');
-            const errorContent = document.getElementById('error-content');
-            
-            // Clear previous errors
-            errorContent.innerHTML = '';
-            
-            // Add error details
-            const errorLine = document.createElement('div');
-            errorLine.className = 'error-line error';
-            errorLine.textContent = `Failed to save: ${data.error}`;
-            errorContent.appendChild(errorLine);
-            
-            // Make the error container visible
-            errorContainer.classList.add('visible');
-          }
-        })
-        .catch(error => {
-          console.error('Error saving source code:', error);
+        try {
+          // Save to localStorage
+          localStorage.setItem(STORAGE_KEY, code);
+          originalCode = code;
           
-          // Show error in error container
-          const errorContainer = document.getElementById('error-container');
-          const errorContent = document.getElementById('error-content');
+          console.log('Source code saved to localStorage');
           
-          // Clear previous errors
-          errorContent.innerHTML = '';
+          // Show success message
+          const saveButton = document.getElementById('saveButton');
+          const originalText = saveButton.textContent;
+          saveButton.textContent = "Saved ✓";
+          setTimeout(() => {
+            saveButton.textContent = originalText;
+          }, 1500);
           
-          // Add error details
-          const errorLine = document.createElement('div');
-          errorLine.className = 'error-line error';
-          errorLine.textContent = `Failed to save: ${error.message || 'Server connection error'}`;
-          errorContent.appendChild(errorLine);
-          
-          // Make the error container visible
-          errorContainer.classList.add('visible');
-        });
+        } catch (error) {
+          console.error('Error saving to localStorage:', error);
+          alert('Failed to save code to browser storage. Your browser may have storage restrictions.');
+        }
       }
 
       // Handle the save button click
@@ -474,12 +450,32 @@
         // Prevent default button behavior to avoid page scrolling
         event.preventDefault();
         
+        // Save to localStorage first
         saveSourceCode();
         
-        // Wait a moment to ensure the save completes, then rebuild
-        setTimeout(() => {
-          rebuildButton.click();
-        }, 500);
+        // Then rebuild immediately (no need to wait since we're not saving to server)
+        rebuildButton.click();
+      });
+      
+      // Function to reset code to default
+      function resetToDefault() {
+        const defaultCode = localStorage.getItem(DEFAULT_CODE_KEY);
+        if (defaultCode) {
+          editor.setValue(defaultCode);
+          localStorage.removeItem(STORAGE_KEY); // Clear saved code
+          console.log('Code reset to default');
+        } else {
+          // Reload default from server if not cached
+          loadSourceCode();
+        }
+      }
+
+      // Handle the reset button click
+      document.getElementById('resetButton').addEventListener('click', function(event) {
+        event.preventDefault();
+        if (confirm('Reset to default code? This will lose your current changes.')) {
+          resetToDefault();
+        }
       });
 
       // Add a keyboard shortcut (Ctrl+S) for saving

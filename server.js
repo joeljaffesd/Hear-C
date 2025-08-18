@@ -3,6 +3,8 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const crypto = require('crypto');
+const os = require('os');
 
 // Configure the port for the API server
 const PORT = process.env.PORT || 3000;
@@ -19,6 +21,18 @@ const MIME_TYPES = {
   '.wasm': 'application/wasm',
   '.data': 'application/octet-stream',
 };
+
+// Function to clean up temporary directories
+function cleanupTempDir(tempDir) {
+  try {
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      console.log(`Cleaned up temp directory: ${tempDir}`);
+    }
+  } catch (error) {
+    console.error(`Error cleaning up temp directory ${tempDir}:`, error);
+  }
+}
 
 // Function to serve static files
 function serveStaticFile(req, res, filePath) {
@@ -68,47 +82,136 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/rebuild') {
     console.log('Rebuild request received');
     
-    // Execute the build script
-    exec('./run.sh build', (error, stdout, stderr) => {
-      // Check for compilation errors
-      const hasCompilationError = stderr && stderr.includes("error:");
-      const errorMessages = [];
-      
-      if (error) {
-        console.error(`Error during build: ${error.message}`);
-        errorMessages.push(error.message);
-      }
-      
-      if (stderr) {
-        console.error(`Build stderr: ${stderr}`);
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    
+    req.on('end', () => {
+      try {
+        const parsedBody = JSON.parse(body);
+        const { code } = parsedBody;
         
-        // Parse Emscripten error messages
-        const errorLines = stderr.split('\n').filter(line => 
-          line.includes("error:") || 
-          line.includes("warning:") || 
-          line.includes("undefined reference")
-        );
+        if (!code) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: "No code provided for compilation" 
+          }));
+          return;
+        }
         
-        errorMessages.push(...errorLines);
-      }
-      
-      console.log(`Build stdout: ${stdout}`);
-      
-      if (hasCompilationError || error) {
-        res.writeHead(400); // Use 400 instead of 500 for compilation errors
-        res.end(JSON.stringify({ 
-          success: false, 
-          error: "Compilation failed", 
-          errorDetails: errorMessages,
-          stdout: stdout,
-          stderr: stderr
-        }));
-      } else {
-        res.writeHead(200);
-        res.end(JSON.stringify({ 
-          success: true, 
-          output: stdout,
-          warnings: stderr ? stderr : null
+        // Generate unique session ID for temporary build
+        const sessionId = crypto.randomBytes(16).toString('hex');
+        const tempDir = path.join(os.tmpdir(), `hear-c-${sessionId}`);
+        const tempSrcDir = path.join(tempDir, 'src');
+        const tempBuildDir = path.join(tempDir, 'build');
+        
+        try {
+          // Create temporary directories
+          fs.mkdirSync(tempDir, { recursive: true });
+          fs.mkdirSync(tempSrcDir, { recursive: true });
+          fs.mkdirSync(tempBuildDir, { recursive: true });
+          
+          // Write user code to temporary file
+          fs.writeFileSync(path.join(tempSrcDir, 'user.h'), code);
+          
+          // Copy main.cpp to temp directory
+          fs.copyFileSync(path.join(__dirname, 'src', 'main.cpp'), path.join(tempSrcDir, 'main.cpp'));
+          
+          // Copy template files needed for build
+          fs.copyFileSync(path.join(__dirname, 'index.html'), path.join(tempDir, 'index.html'));
+          fs.copyFileSync(path.join(__dirname, 'styles.css'), path.join(tempDir, 'styles.css'));
+          fs.copyFileSync(path.join(__dirname, 'logo.ico'), path.join(tempDir, 'logo.ico'));
+          
+          // Build command for temporary directory
+          const buildCmd = `cd ${tempDir} && emcc src/main.cpp -o build/index.html -s USE_SDL=2 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=ccall,cwrap -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio --shell-file index.html -O2 && cp styles.css build/ && cp logo.ico build/`;
+          
+          // Execute the build
+          exec(buildCmd, (error, stdout, stderr) => {
+            // Check for compilation errors
+            const hasCompilationError = stderr && stderr.includes("error:");
+            const errorMessages = [];
+            
+            if (error) {
+              console.error(`Error during build: ${error.message}`);
+              errorMessages.push(error.message);
+            }
+            
+            if (stderr) {
+              console.error(`Build stderr: ${stderr}`);
+              
+              // Parse Emscripten error messages
+              const errorLines = stderr.split('\n').filter(line => 
+                line.includes("error:") || 
+                line.includes("warning:") || 
+                line.includes("undefined reference")
+              );
+              
+              errorMessages.push(...errorLines);
+            }
+            
+            console.log(`Build stdout: ${stdout}`);
+            
+            if (hasCompilationError || error) {
+              // Clean up temp directory
+              cleanupTempDir(tempDir);
+              
+              res.writeHead(400);
+              res.end(JSON.stringify({ 
+                success: false, 
+                error: "Compilation failed", 
+                errorDetails: errorMessages,
+                stdout: stdout,
+                stderr: stderr
+              }));
+            } else {
+              // Copy successful build to main build directory
+              try {
+                fs.copyFileSync(path.join(tempBuildDir, 'index.html'), path.join(__dirname, 'build', 'index.html'));
+                fs.copyFileSync(path.join(tempBuildDir, 'index.js'), path.join(__dirname, 'build', 'index.js'));
+                fs.copyFileSync(path.join(tempBuildDir, 'index.wasm'), path.join(__dirname, 'build', 'index.wasm'));
+                
+                // Clean up temp directory
+                cleanupTempDir(tempDir);
+                
+                res.writeHead(200);
+                res.end(JSON.stringify({ 
+                  success: true, 
+                  output: stdout,
+                  warnings: stderr ? stderr : null,
+                  sessionId: sessionId
+                }));
+              } catch (copyError) {
+                console.error('Error copying build files:', copyError);
+                cleanupTempDir(tempDir);
+                
+                res.writeHead(500);
+                res.end(JSON.stringify({
+                  success: false,
+                  error: "Build succeeded but failed to copy files"
+                }));
+              }
+            }
+          });
+          
+        } catch (fsError) {
+          console.error('Filesystem error during build:', fsError);
+          cleanupTempDir(tempDir);
+          
+          res.writeHead(500);
+          res.end(JSON.stringify({
+            success: false,
+            error: `Filesystem error: ${fsError.message}`
+          }));
+        }
+        
+      } catch (parseError) {
+        console.error('Error parsing rebuild request:', parseError);
+        res.writeHead(400);
+        res.end(JSON.stringify({
+          success: false,
+          error: 'Invalid request format'
         }));
       }
     });

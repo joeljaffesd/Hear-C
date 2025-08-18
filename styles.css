@@ -169,6 +169,14 @@ button:focus {
   background-color: #219955;
 }
 
+.editor-button.reset {
+  background-color: #e74c3c;
+}
+
+.editor-button.reset:hover {
+  background-color: #c0392b;
+}
+
 /* CodeMirror styling */
 .CodeMirror {
   height: 400px;
