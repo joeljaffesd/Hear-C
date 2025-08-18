@@ -5,8 +5,8 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 
 - **Real-time audio synthesis** using WebAssembly and WebAudio API
 - **LocalStorage persistence** - your code is saved in your browser and persists between sessions
-
-- **Interactive code editor** with C++ syntax highlighting
+- **Monaco Editor** - the same powerful code editor that powers VS Code, with full C++ support
+- **IntelliSense-like features** - syntax highlighting, bracket matching, and intelligent suggestions
 - **One-click rebuilding** - edit, compile, and hear your changes instantly
 
 ## Using:

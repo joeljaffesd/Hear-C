@@ -7,19 +7,13 @@
     <!-- Favicon -->
     <link rel="icon" href="logo.ico" type="image/x-icon">
     <link rel="shortcut icon" href="logo.ico" type="image/x-icon">
-    <!-- CodeMirror CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css">
-    <!-- CodeMirror JS -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/clike/clike.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/matchbrackets.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/comment/comment.min.js"></script>
+    <!-- Monaco Editor -->
+    <script src="https://unpkg.com/monaco-editor@0.44.0/min/vs/loader.js"></script>
     <!-- Main application styles -->
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <h1 style="text-align: center;">Hear-C: SDL2 Audio Demo</h1>
+    <h1 style="text-align: center;">Hear-C: Browser-Based C++ Audio Development</h1>
     
     <div id="controls">
       <button id="startAudio" class="button" disabled>Start Audio</button>
@@ -36,7 +30,7 @@
           <button id="saveAndRebuildButton" class="editor-button" type="button">Save & Rebuild</button>
         </div>
       </div>
-      <textarea id="code-editor"></textarea>
+      <div id="monaco-editor"></div>
     </div>
 
     <!-- Error display container for compilation errors -->
@@ -46,7 +40,7 @@
     </div>
 
     <div class="emscripten">
-      <textarea class="emscripten" id="output" rows="8"></textarea>
+      <textarea class="emscripten" id="output" rows="8" readonly></textarea>
     </div>
 
     <div class="emscripten" id="status">Downloading...</div>
@@ -325,49 +319,83 @@
         };
       };
 
-      // CodeMirror Editor Setup
+      // Monaco Editor Setup
       let editor;
       let originalCode = '';
       let editorActive = false; // Track if editor is active
       const STORAGE_KEY = 'hear_c_user_code';
       const DEFAULT_CODE_KEY = 'hear_c_default_code';
 
-      // Initialize the CodeMirror editor after the page loads
+      // Initialize the Monaco editor after the page loads
       window.addEventListener('load', function() {
-        // Create CodeMirror instance
-        editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
-          mode: 'text/x-c++src',
-          theme: 'monokai',
-          lineNumbers: true,
-          matchBrackets: true,
-          indentUnit: 4,
-          tabSize: 4,
-          indentWithTabs: false,
-          autoCloseBrackets: true
+        // Configure Monaco loader
+        require.config({ 
+          paths: { 
+            'vs': 'https://unpkg.com/monaco-editor@0.44.0/min/vs' 
+          } 
         });
+        
+        // Load Monaco Editor
+        require(['vs/editor/editor.main'], function() {
+          // Create Monaco editor instance
+          editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+            value: '',
+            language: 'cpp',
+            theme: 'vs-dark',
+            fontSize: 14,
+            lineNumbers: 'on',
+            roundedSelection: false,
+            scrollBeyondLastLine: false,
+            minimap: {
+              enabled: true
+            },
+            automaticLayout: true,
+            tabSize: 2,
+            insertSpaces: true,
+            wordWrap: 'on',
+            bracketPairColorization: {
+              enabled: true
+            },
+            suggest: {
+              enabled: true
+            },
+            quickSuggestions: {
+              other: true,
+              comments: true,
+              strings: true
+            }
+          });
 
-        // Load the source code (from localStorage or server default)
-        loadSourceCode();
-        
-        // Handle editor focus events
-        editor.on('focus', function() {
-          editorActive = true;
-          console.log('Editor focused, keyboard input directed to CodeMirror');
+          // Load the source code (from localStorage or server default)
+          loadSourceCode();
+
+          // Handle editor focus events
+          editor.onDidFocusEditorWidget(() => {
+            editorActive = true;
+            console.log('Editor focused, keyboard input directed to Monaco');
+            
+            // Pause emscripten's keyboard events
+            if (Module.canvas) {
+              Module.canvas.blur();
+            }
+          });
           
-          // Pause emscripten's keyboard events
-          if (Module.canvas) {
-            Module.canvas.blur();
-          }
-        });
-        
-        editor.on('blur', function() {
-          editorActive = false;
-          console.log('Editor blurred, keyboard input restored to canvas');
+          editor.onDidBlurEditorWidget(() => {
+            editorActive = false;
+            console.log('Editor blurred, keyboard input restored to canvas');
+            
+            // Restore focus to canvas for SDL keyboard events
+            if (Module.canvas) {
+              Module.canvas.focus();
+            }
+          });
           
-          // Restore focus to canvas for SDL keyboard events
-          if (Module.canvas) {
-            Module.canvas.focus();
-          }
+          // Add Ctrl+S keyboard shortcut for saving
+          editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
+            saveSourceCode();
+          });
+          
+          console.log('Monaco Editor initialized successfully');
         });
         
         // Manually blur the canvas when clicking on the editor
@@ -387,7 +415,9 @@
           // Use saved code from localStorage
           console.log('Loading code from localStorage');
           originalCode = savedCode;
-          editor.setValue(savedCode);
+          if (editor) {
+            editor.setValue(savedCode);
+          }
           return;
         }
         
@@ -402,7 +432,9 @@
           })
           .then(code => {
             originalCode = code;
-            editor.setValue(code);
+            if (editor) {
+              editor.setValue(code);
+            }
             // Store the default code for reference
             localStorage.setItem(DEFAULT_CODE_KEY, code);
             console.log('Default source code loaded and cached');
@@ -475,14 +507,6 @@
         event.preventDefault();
         if (confirm('Reset to default code? This will lose your current changes.')) {
           resetToDefault();
-        }
-      });
-
-      // Add a keyboard shortcut (Ctrl+S) for saving
-      editor && editor.setOption('extraKeys', {
-        'Ctrl-S': function() {
-          saveSourceCode();
-          return false;
         }
       });
     </script>
