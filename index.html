@@ -221,7 +221,7 @@
         document.getElementById('error-container').classList.remove('visible');
         
         // Make a request to the rebuild server
-        fetch('http://localhost:3000/rebuild', {
+        fetch('/rebuild', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -371,7 +371,7 @@
 
       // Function to load the source code from the server
       function loadSourceCode() {
-        fetch('http://localhost:3000/source')
+        fetch('/source')
           .then(response => {
             if (!response.ok) {
               throw new Error(`HTTP error! Status: ${response.status}`);
@@ -396,7 +396,7 @@
         // Hide any previous error display
         document.getElementById('error-container').classList.remove('visible');
         
-        fetch('http://localhost:3000/update-source', {
+        fetch('/update-source', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
