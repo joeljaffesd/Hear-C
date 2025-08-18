@@ -27,7 +27,7 @@ function cleanupTempDir(tempDir) {
   try {
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
-      console.log(`Cleaned up temp directory: ${tempDir}`);
+      // Only log cleanup in debug mode or if there's an issue
     }
   } catch (error) {
     console.error(`Error cleaning up temp directory ${tempDir}:`, error);
@@ -80,7 +80,8 @@ const server = http.createServer((req, res) => {
 
   // Handle rebuild request
   if (req.method === 'POST' && req.url === '/rebuild') {
-    console.log('Rebuild request received');
+    const startTime = Date.now();
+    console.log('🔨 Compiling C++ code...');
     
     let body = '';
     req.on('data', chunk => {
@@ -151,11 +152,17 @@ const server = http.createServer((req, res) => {
               errorMessages.push(...errorLines);
             }
             
-            console.log(`Build stdout: ${stdout}`);
+            // Only log stdout if there are errors or in debug mode
+            if (hasCompilationError || error) {
+              console.log(`Build stdout: ${stdout}`);
+            }
             
             if (hasCompilationError || error) {
               // Clean up temp directory
               cleanupTempDir(tempDir);
+              
+              const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+              console.log(`❌ Compilation failed after ${duration}s`);
               
               res.writeHead(400);
               res.end(JSON.stringify({ 
@@ -175,6 +182,9 @@ const server = http.createServer((req, res) => {
                 // Clean up temp directory
                 cleanupTempDir(tempDir);
                 
+                const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log(`✅ Compilation successful in ${duration}s`);
+                
                 res.writeHead(200);
                 res.end(JSON.stringify({ 
                   success: true, 
@@ -185,6 +195,9 @@ const server = http.createServer((req, res) => {
               } catch (copyError) {
                 console.error('Error copying build files:', copyError);
                 cleanupTempDir(tempDir);
+                
+                const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log(`❌ Compilation succeeded but copy failed after ${duration}s`);
                 
                 res.writeHead(500);
                 res.end(JSON.stringify({
@@ -198,6 +211,9 @@ const server = http.createServer((req, res) => {
         } catch (fsError) {
           console.error('Filesystem error during build:', fsError);
           cleanupTempDir(tempDir);
+          
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`❌ Filesystem error after ${duration}s`);
           
           res.writeHead(500);
           res.end(JSON.stringify({
@@ -304,8 +320,6 @@ const server = http.createServer((req, res) => {
         filePath = path.join(__dirname, pathname.substring(1));
       }
     }
-    
-    console.log(`Attempting to serve: ${filePath}`);
     
     // Check if the file exists and serve it
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
