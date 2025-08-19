@@ -1,13 +1,13 @@
 #ifndef USER_H
 #define USER_H
 
-#include "../Gimmel/include/gimmel.hpp"
+#include "gimmel.hpp"
 
 /*
 NOTE: SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
 */
 
-// global instance of object
+// global instances of objects
 giml::Phasor<float> mOsc{SAMPLE_RATE};
 giml::Delay<float> mDelay{SAMPLE_RATE};
 giml::EffectsLine<float> mEffectsLine;

@@ -1,201 +1,307 @@
-/* Main styles for Hear-C application */
+/* Hear-C IDE - Faust IDE Inspired Layout */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
 body {
-  font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 20px;
-  background-color: #f5f5f5;
-  min-height: 100%;
-  overflow-y: scroll;
-  /* Prevent content shifts by always showing scrollbar */
-  padding-left: calc(100vw - 100%);
-}
-
-/* Prevent unwanted page jumps */
-html {
-  scroll-behavior: smooth;
-  height: 100%;
-  overflow-y: auto;
-}
-
-/* Emscripten elements */
-.emscripten {
-  padding: 0;
-  margin: 0 auto;
-  display: block;
-}
-
-textarea.emscripten {
-  resize: none;
-  width: 80%;
-  height: 150px;
-  border: 1px solid #999;
-  padding: 5px;
-  font-family: monospace;
-}
-
-div.emscripten {
-  text-align: center;
-  margin-top: 20px;
-}
-
-.emscripten_border {
-  margin-top: 20px;
-}
-
-/* Loading spinner */
-.spinner {
-  height: 30px;
-  width: 30px;
-  margin: 0 auto;
-  animation: rotation 1.5s linear infinite;
-  border: 6px solid #3498db;
-  border-top: 6px solid #f5f5f5;
-  border-radius: 100%;
-}
-
-@keyframes rotation {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Controls section */
-#controls {
-  margin: 20px auto;
-  max-width: 800px;
-  text-align: center;
-  padding: 10px;
-  background-color: #e0e0e0;
-  border-radius: 8px;
-  position: relative;
-  z-index: 2;
-}
-
-#status {
-  display: inline-block;
-  margin-left: 20px;
-}
-
-/* Button styles */
-.button {
-  padding: 10px 20px;
-  font-size: 16px;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  margin: 10px;
-  display: inline-block;
-}
-
-#startAudio {
-  background-color: #4CAF50;
-}
-
-#startAudio:hover {
-  background-color: #45a049;
-}
-
-#startAudio:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-#rebuildButton {
-  background-color: #3498db;
-}
-
-#rebuildButton:hover {
-  background-color: #2980b9;
-}
-
-#rebuildButton:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-/* Prevent focus outlines on buttons that might cause layout shifts */
-button:focus {
-  outline: none;
-}
-
-/* Code editor container */
-#editor-container {
-  max-width: 800px;
-  margin: 20px auto;
-  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', sans-serif;
+  background: #2d2d30;
+  color: #cccccc;
+  height: 100vh;
   overflow: hidden;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Main IDE Layout */
+.ide-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Header */
+.header {
+  background: #1e1e1e;
+  border-bottom: 1px solid #444;
+  padding: 12px 20px;
+  text-align: center;
+  position: relative;
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 500;
+  color: #ffffff;
+  margin: 0;
+}
+
+.header-logo {
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+
+.github-link {
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  color: #8b949e;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.github-link:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.github-icon {
+  width: 24px;
+  height: 24px;
+  transition: all 0.2s ease;
+}
+
+.github-link:hover .github-icon {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.3));
+}
+
+/* Main Content Area */
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Center: Editor Section */
+.editor-section {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  border-right: 1px solid #444;
 }
 
 .editor-header {
-  background-color: #2c3e50;
-  color: white;
-  padding: 10px 15px;
+  background: #2d2d30;
+  border-bottom: 1px solid #444;
+  padding: 8px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  height: 35px;
 }
 
 .editor-title {
-  font-weight: bold;
-  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #cccccc;
 }
 
-.editor-actions {
-  display: flex;
-  gap: 10px;
+.editor-status {
+  font-size: 11px;
+  color: #4ec9b0;
 }
 
-.editor-button {
-  background-color: #3498db;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 5px 10px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.editor-button:hover {
-  background-color: #2980b9;
-}
-
-.editor-button.save {
-  background-color: #27ae60;
-}
-
-.editor-button.save:hover {
-  background-color: #219955;
-}
-
-/* CodeMirror styling */
-.CodeMirror {
-  height: 400px;
-  font-family: monospace;
-  font-size: 14px;
-}
-
-/* Output console styling */
-#output {
-  margin-top: 10px;
-  margin-bottom: 20px;
-  max-width: 800px;
-  width: 100%;
-  border-radius: 0 0 8px 8px;
-  border-top: none;
-  background-color: #2c3e50;
-  color: #f1f1f1;
-  font-family: monospace;
-}
-
-/* Error display styling */
-#error-container {
-  max-width: 800px;
-  margin: 10px auto;
-  border-radius: 8px;
+#monaco-editor {
+  flex: 1;
+  background: #1e1e1e;
   overflow: hidden;
+  position: relative;
+  height: 0;
+}
+
+/* Right Panel: Controls */
+.right-panel {
+  flex: 0 0 280px;
+  max-width: 280px;
+  min-width: 240px;
+  background: #252526;
+  border-left: 1px solid #444;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.panel-section {
+  border-bottom: 1px solid #444;
+  padding: 16px;
+}
+
+.panel-section h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #444;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panel-button {
+  background: #0e639c;
+  border: none;
+  border-radius: 3px;
+  color: #ffffff;
+  padding: 10px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.panel-button:hover {
+  background: #1177bb;
+}
+
+.panel-button:disabled {
+  background: #3c3c3c;
+  color: #6d6d6d;
+  cursor: not-allowed;
+}
+
+.panel-button.save {
+  background: #16825d;
+}
+
+.panel-button.save:hover {
+  background: #1e9973;
+}
+
+.panel-button.reset {
+  background: #a1260d;
+}
+
+.panel-button.reset:hover {
+  background: #c72e0d;
+}
+
+.panel-button.audio {
+  background: #6f42c1;
+}
+
+.panel-button.audio:hover {
+  background: #8a63d2;
+}
+
+/* Bottom Panel: Console */
+.bottom-panel {
+  height: 200px;
+  background: #1e1e1e;
+  border-top: 1px solid #444;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-header {
+  background: #2d2d30;
+  border-bottom: 1px solid #444;
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 35px;
+}
+
+.console-header h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.console-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.console-button {
+  background: #0e639c;
+  border: none;
+  border-radius: 3px;
+  color: #ffffff;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.console-button:hover {
+  background: #1177bb;
+}
+
+.console-button:active {
+  background: #0a4f7a;
+}
+
+.console-content {
+  flex: 1;
+  padding: 8px;
+}
+
+#output {
+  width: 100%;
+  height: 100%;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  color: #c9d1d9;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  padding: 12px;
+  resize: none;
+  outline: none;
+  line-height: 1.4;
+}
+
+#output:focus {
+  border-color: #58a6ff;
+}
+
+/* Error Container */
+#error-container {
+  position: fixed;
+  bottom: 220px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 800px;
+  width: 90%;
+  background: #1e1e1e;
+  border: 1px solid #f85149;
+  border-radius: 6px;
   display: none;
+  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 #error-container.visible {
@@ -203,22 +309,44 @@ button:focus {
 }
 
 .error-header {
-  background-color: #e74c3c;
-  color: white;
-  padding: 10px 15px;
+  background: #f85149;
+  color: #ffffff;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.error-close {
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 18px;
   font-weight: bold;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+.error-close:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .error-content {
-  background-color: #f9f9f9;
-  border: 1px solid #e74c3c;
-  border-top: none;
-  padding: 10px;
+  padding: 16px;
   max-height: 200px;
   overflow-y: auto;
-  white-space: pre-wrap;
-  font-family: monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
+  line-height: 1.4;
 }
 
 .error-line {
@@ -227,9 +355,50 @@ button:focus {
 }
 
 .error-line.error {
-  color: #e74c3c;
+  color: #ff7b72;
 }
 
 .error-line.warning {
-  color: #f39c12;
+  color: #d29922;
+}
+
+/* Hidden elements */
+.emscripten {
+  display: none;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .right-panel {
+    flex: 0 0 240px;
+    max-width: 240px;
+    min-width: 200px;
+  }
+  
+  .bottom-panel {
+    height: 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    flex-direction: column;
+  }
+  
+  .right-panel {
+    flex: 0 0 200px;
+    max-width: 100%;
+    min-width: 100%;
+    height: 200px;
+    order: 2;
+  }
+  
+  .editor-section {
+    order: 1;
+    min-height: 300px;
+  }
+  
+  .bottom-panel {
+    height: 150px;
+  }
 }

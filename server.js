@@ -3,9 +3,11 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const crypto = require('crypto');
+const os = require('os');
 
 // Configure the port for the API server
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // MIME types for serving static files
 const MIME_TYPES = {
@@ -19,6 +21,18 @@ const MIME_TYPES = {
   '.wasm': 'application/wasm',
   '.data': 'application/octet-stream',
 };
+
+// Function to clean up temporary directories
+function cleanupTempDir(tempDir) {
+  try {
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      // Only log cleanup in debug mode or if there's an issue
+    }
+  } catch (error) {
+    console.error(`Error cleaning up temp directory ${tempDir}:`, error);
+  }
+}
 
 // Function to serve static files
 function serveStaticFile(req, res, filePath) {
@@ -57,51 +71,170 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Health check endpoint for Railway/hosting platforms
+  if (req.method === 'GET' && req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+    return;
+  }
+
   // Handle rebuild request
   if (req.method === 'POST' && req.url === '/rebuild') {
-    console.log('Rebuild request received');
+    const startTime = Date.now();
+    console.log('🔨 Compiling C++ code...');
     
-    // Execute the build script
-    exec('./run.sh build', (error, stdout, stderr) => {
-      // Check for compilation errors
-      const hasCompilationError = stderr && stderr.includes("error:");
-      const errorMessages = [];
-      
-      if (error) {
-        console.error(`Error during build: ${error.message}`);
-        errorMessages.push(error.message);
-      }
-      
-      if (stderr) {
-        console.error(`Build stderr: ${stderr}`);
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    
+    req.on('end', () => {
+      try {
+        const parsedBody = JSON.parse(body);
+        const { code } = parsedBody;
         
-        // Parse Emscripten error messages
-        const errorLines = stderr.split('\n').filter(line => 
-          line.includes("error:") || 
-          line.includes("warning:") || 
-          line.includes("undefined reference")
-        );
+        if (!code) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: "No code provided for compilation" 
+          }));
+          return;
+        }
         
-        errorMessages.push(...errorLines);
-      }
-      
-      console.log(`Build stdout: ${stdout}`);
-      
-      if (hasCompilationError || error) {
-        res.writeHead(400); // Use 400 instead of 500 for compilation errors
-        res.end(JSON.stringify({ 
-          success: false, 
-          error: "Compilation failed", 
-          errorDetails: errorMessages,
-          stdout: stdout,
-          stderr: stderr
-        }));
-      } else {
-        res.writeHead(200);
-        res.end(JSON.stringify({ 
-          success: true, 
-          output: stdout,
-          warnings: stderr ? stderr : null
+        // Generate unique session ID for temporary build
+        const sessionId = crypto.randomBytes(16).toString('hex');
+        const tempDir = path.join(os.tmpdir(), `hear-c-${sessionId}`);
+        const tempSrcDir = path.join(tempDir, 'src');
+        const tempBuildDir = path.join(tempDir, 'build');
+        
+        try {
+          // Create temporary directories
+          fs.mkdirSync(tempDir, { recursive: true });
+          fs.mkdirSync(tempSrcDir, { recursive: true });
+          fs.mkdirSync(tempBuildDir, { recursive: true });
+          
+          // Write user code to temporary file
+          fs.writeFileSync(path.join(tempSrcDir, 'user.h'), code);
+          
+          // Copy main.cpp to temp directory
+          fs.copyFileSync(path.join(__dirname, 'src', 'main.cpp'), path.join(tempSrcDir, 'main.cpp'));
+          
+          // Copy template files needed for build
+          fs.copyFileSync(path.join(__dirname, 'index.html'), path.join(tempDir, 'index.html'));
+          fs.copyFileSync(path.join(__dirname, 'styles.css'), path.join(tempDir, 'styles.css'));
+          fs.copyFileSync(path.join(__dirname, 'logo.ico'), path.join(tempDir, 'logo.ico'));
+          
+          // Copy Gimmel library to temp directory if it exists
+          const gimmelSrcPath = path.join(__dirname, 'Gimmel');
+          const gimmelDestPath = path.join(tempDir, 'Gimmel');
+          if (fs.existsSync(gimmelSrcPath)) {
+            fs.cpSync(gimmelSrcPath, gimmelDestPath, { recursive: true });
+          }
+          
+          // Build command for temporary directory with Gimmel include path
+          const buildCmd = `cd ${tempDir} && emcc src/main.cpp -o build/index.html -s USE_SDL=2 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=ccall,cwrap -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio --shell-file index.html -I./Gimmel/include -O2 && cp styles.css build/ && cp logo.ico build/`;
+          
+          // Execute the build
+          exec(buildCmd, (error, stdout, stderr) => {
+            // Check for compilation errors
+            const hasCompilationError = stderr && stderr.includes("error:");
+            const errorMessages = [];
+            
+            if (error) {
+              console.error(`Error during build: ${error.message}`);
+              errorMessages.push(error.message);
+            }
+            
+            if (stderr) {
+              console.error(`Build stderr: ${stderr}`);
+              
+              // Parse Emscripten error messages
+              const errorLines = stderr.split('\n').filter(line => 
+                line.includes("error:") || 
+                line.includes("warning:") || 
+                line.includes("undefined reference")
+              );
+              
+              errorMessages.push(...errorLines);
+            }
+            
+            // Only log stdout if there are errors or in debug mode
+            if (hasCompilationError || error) {
+              console.log(`Build stdout: ${stdout}`);
+            }
+            
+            if (hasCompilationError || error) {
+              // Clean up temp directory
+              cleanupTempDir(tempDir);
+              
+              const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+              console.log(`❌ Compilation failed after ${duration}s`);
+              
+              res.writeHead(400);
+              res.end(JSON.stringify({ 
+                success: false, 
+                error: "Compilation failed", 
+                errorDetails: errorMessages,
+                stdout: stdout,
+                stderr: stderr
+              }));
+            } else {
+              // Copy successful build to main build directory
+              try {
+                fs.copyFileSync(path.join(tempBuildDir, 'index.html'), path.join(__dirname, 'build', 'index.html'));
+                fs.copyFileSync(path.join(tempBuildDir, 'index.js'), path.join(__dirname, 'build', 'index.js'));
+                fs.copyFileSync(path.join(tempBuildDir, 'index.wasm'), path.join(__dirname, 'build', 'index.wasm'));
+                
+                // Clean up temp directory
+                cleanupTempDir(tempDir);
+                
+                const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log(`✅ Compilation successful in ${duration}s`);
+                
+                res.writeHead(200);
+                res.end(JSON.stringify({ 
+                  success: true, 
+                  output: stdout,
+                  warnings: stderr ? stderr : null,
+                  sessionId: sessionId
+                }));
+              } catch (copyError) {
+                console.error('Error copying build files:', copyError);
+                cleanupTempDir(tempDir);
+                
+                const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+                console.log(`❌ Compilation succeeded but copy failed after ${duration}s`);
+                
+                res.writeHead(500);
+                res.end(JSON.stringify({
+                  success: false,
+                  error: "Build succeeded but failed to copy files"
+                }));
+              }
+            }
+          });
+          
+        } catch (fsError) {
+          console.error('Filesystem error during build:', fsError);
+          cleanupTempDir(tempDir);
+          
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`❌ Filesystem error after ${duration}s`);
+          
+          res.writeHead(500);
+          res.end(JSON.stringify({
+            success: false,
+            error: `Filesystem error: ${fsError.message}`
+          }));
+        }
+        
+      } catch (parseError) {
+        console.error('Error parsing rebuild request:', parseError);
+        res.writeHead(400);
+        res.end(JSON.stringify({
+          success: false,
+          error: 'Invalid request format'
         }));
       }
     });
@@ -195,8 +328,6 @@ const server = http.createServer((req, res) => {
       }
     }
     
-    console.log(`Attempting to serve: ${filePath}`);
-    
     // Check if the file exists and serve it
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       serveStaticFile(req, res, filePath);
@@ -215,9 +346,9 @@ const server = http.createServer((req, res) => {
 });
 
 // Start the server
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n==== Hear-C Server ====`);
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running at http://0.0.0.0:${PORT}`);
   console.log(`- Access the app at http://localhost:${PORT}/`);
   console.log(`- Edit code in the browser with the code editor`);
   console.log(`- Use the "Rebuild" button to recompile after changes`);
