@@ -3,7 +3,7 @@
   
   # Hear-C: A Browser-Based Development Environment for C++ Audio
 
-  [![Try Live Demo](https://img.shields.io/badge/🚀_Try_Live_Demo-hear--c.dev-blue?style=for-the-badge&logoColor=white)](https://hear-c.dev)
+  [![Try Live Demo](https://img.shields.io/badge/🚀_Try_Live_Demo-hear--c.online-blue?style=for-the-badge&logoColor=white)](https://hear-c.online)
 
 </div>
 
@@ -22,7 +22,7 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 ## Getting Started:
 
 ### 🌐 Try Online (Recommended)
-**[Visit hear-c.dev](https://hear-c.dev)** - No setup required! Just open your browser and start coding.
+**[Visit hear-c.online](https://hear-c.online)** - No setup required! Just open your browser and start coding.
 
 ### 🛠️ Run Locally
 
