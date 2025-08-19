@@ -37,6 +37,22 @@ body {
   margin: 0;
 }
 
+.header-logo {
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+
 .github-link {
   position: absolute;
   top: 50%;
