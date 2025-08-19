@@ -3,6 +3,7 @@
 #include <emscripten/html5.h>
 #include <iostream>
 #include <cmath>
+#include <cstring>
 
 // Audio parameters
 #define SAMPLE_RATE 44100
@@ -77,6 +78,37 @@ EM_BOOL keyDownCallback(int eventType, const EmscriptenKeyboardEvent* e, void* u
 
 // Export functions to JavaScript
 extern "C" {
+  // Get number of choices for a parameter
+  EMSCRIPTEN_KEEPALIVE
+  int getParamNumChoices(int index) {
+    if (index >= 0 && index < params.size()) {
+      auto* param = params[index];
+      if (strcmp(param->getParamType(), "choice") == 0) {
+        auto* choice = dynamic_cast<giml::ChoiceParam<float>*>(param);
+        if (choice) return choice->getNumChoices();
+      }
+    }
+    return 0;
+  }
+
+  // Get label for a choice
+  EMSCRIPTEN_KEEPALIVE
+  const char* getParamChoiceLabel(int index, int choiceIdx) {
+    if (index >= 0 && index < params.size()) {
+      auto* param = params[index];
+      if (strcmp(param->getParamType(), "choice") == 0) {
+        auto* choice = dynamic_cast<giml::ChoiceParam<float>*>(param);
+        if (choice) {
+          static char labelBuffer[128];
+          std::string label = choice->getLabel(choiceIdx);
+          strncpy(labelBuffer, label.c_str(), sizeof(labelBuffer) - 1);
+          labelBuffer[sizeof(labelBuffer) - 1] = '\0';
+          return labelBuffer;
+        }
+      }
+    }
+    return "";
+  }
   // Function to start audio - called from JavaScript
   EMSCRIPTEN_KEEPALIVE
   void startAudio() {
@@ -91,6 +123,69 @@ extern "C" {
     // Pause the audio device
     SDL_PauseAudioDevice(audioDevice, 1);
     std::cout << "Audio stopped from JavaScript" << std::endl;
+  }
+  
+  // Parameter control functions
+  EMSCRIPTEN_KEEPALIVE
+  int getParamCount() {
+    return params.size();
+  }
+  
+  EMSCRIPTEN_KEEPALIVE
+  const char* getParamName(int index) {
+    if (index >= 0 && index < params.size()) {
+      // Use a simpler approach - JavaScript will copy the string
+      static char nameBuffer[256];
+      std::string name = params[index]->getName();
+      strncpy(nameBuffer, name.c_str(), sizeof(nameBuffer) - 1);
+      nameBuffer[sizeof(nameBuffer) - 1] = '\0';
+      return nameBuffer;
+    }
+    return "";
+  }
+  
+  EMSCRIPTEN_KEEPALIVE
+  float getParamMin(int index) {
+    if (index >= 0 && index < params.size()) {
+      return params[index]->getMin();
+    }
+    return 0.0f;
+  }
+  
+  EMSCRIPTEN_KEEPALIVE
+  float getParamMax(int index) {
+    if (index >= 0 && index < params.size()) {
+      return params[index]->getMax();
+    }
+    return 1.0f;
+  }
+  
+  EMSCRIPTEN_KEEPALIVE
+  float getParamValue(int index) {
+    if (index >= 0 && index < params.size()) {
+      return params[index]->getCurrent();
+    }
+    return 0.0f;
+  }
+  
+  EMSCRIPTEN_KEEPALIVE
+  void setParamValue(int index, float value) {
+    if (index >= 0 && index < params.size()) {
+      params[index]->setValue(value);
+    }
+  }
+  
+  EMSCRIPTEN_KEEPALIVE
+  const char* getParamType(int index) {
+    if (index >= 0 && index < params.size()) {
+      // Use a simpler approach - JavaScript will copy the string
+      static char typeBuffer[64];
+      std::string type = params[index]->getParamType();
+      strncpy(typeBuffer, type.c_str(), sizeof(typeBuffer) - 1);
+      typeBuffer[sizeof(typeBuffer) - 1] = '\0';
+      return typeBuffer;
+    }
+    return "unknown";
   }
 }
 

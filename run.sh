@@ -16,8 +16,8 @@ build_project() {
   emcc src/main.cpp -o build/index.html \
     -s USE_SDL=2 \
     -s ALLOW_MEMORY_GROWTH=1 \
-    -s EXPORTED_RUNTIME_METHODS=ccall,cwrap \
-    -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio \
+    -s EXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,stringToUTF8 \
+  -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio,_getParamCount,_getParamName,_getParamMin,_getParamMax,_getParamValue,_setParamValue,_getParamType,_getParamNumChoices,_getParamChoiceLabel \
     --shell-file index.html \
     -I./Gimmel/include \
     -O2

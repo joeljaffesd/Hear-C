@@ -133,7 +133,7 @@ const server = http.createServer((req, res) => {
           }
           
           // Build command for temporary directory with Gimmel include path
-          const buildCmd = `cd ${tempDir} && emcc src/main.cpp -o build/index.html -s USE_SDL=2 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=ccall,cwrap -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio --shell-file index.html -I./Gimmel/include -O2 && cp styles.css build/ && cp logo.ico build/`;
+          const buildCmd = `cd ${tempDir} && emcc src/main.cpp -o build/index.html -s USE_SDL=2 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,stringToUTF8 -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio,_getParamCount,_getParamName,_getParamMin,_getParamMax,_getParamValue,_setParamValue --shell-file index.html -I./Gimmel/include -O2 && cp styles.css build/ && cp logo.ico build/`;
           
           // Execute the build
           exec(buildCmd, (error, stdout, stderr) => {

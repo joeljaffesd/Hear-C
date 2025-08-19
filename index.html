@@ -65,6 +65,13 @@
             </div>
           </div>
           
+          <div class="panel-section">
+            <h3>Audio Params</h3>
+            <div class="control-group" id="param-controls">
+              <!-- Dynamic parameter controls will be generated here -->
+            </div>
+          </div>
+          
         </div>
       </div>
       
@@ -151,6 +158,12 @@
               if (rebuildButton) {
                 rebuildButton.disabled = false;
               }
+              
+              // Generate parameter controls with a small delay to ensure module is ready
+              console.log("Scheduling parameter control generation");
+              setTimeout(() => {
+                generateParameterControls();
+              }, 500);
             }
           }
           statusElement.innerHTML = text;
@@ -437,6 +450,198 @@
           rebuildFromBrowser();
         });
       });
+      
+      // Function to generate parameter controls dynamically
+      function generateParameterControls() {
+        console.log('generateParameterControls called');
+        console.log('Module available:', typeof Module !== 'undefined');
+        console.log('Module._getParamCount available:', typeof Module !== 'undefined' && typeof Module._getParamCount === 'function');
+        
+        if (typeof Module === 'undefined' || !Module._getParamCount) {
+          console.warn('WebAssembly module not ready for parameter controls');
+          return;
+        }
+        
+        const paramContainer = document.getElementById('param-controls');
+        if (!paramContainer) {
+          console.warn('Parameter controls container not found');
+          return;
+        }
+        
+        // Clear existing controls
+        paramContainer.innerHTML = '';
+        
+        try {
+          const paramCount = Module._getParamCount();
+          console.log(`Generating controls for ${paramCount} parameters`);
+          
+          if (paramCount === 0) {
+            console.log('No parameters found, showing empty message');
+            return; // Let CSS handle the "No parameters available" message
+          }
+          
+          for (let i = 0; i < paramCount; i++) {
+            console.log(`Creating control for parameter ${i}`);
+            
+            // Get parameter name using UTF8ToString
+            const namePtr = Module._getParamName(i);
+            const name = Module.UTF8ToString ? Module.UTF8ToString(namePtr) : `Parameter ${i}`;
+            
+            const min = Module._getParamMin(i);
+            const max = Module._getParamMax(i);
+            const value = Module._getParamValue(i);
+            
+            // Get parameter type using the new getParamType function
+            const typePtr = Module._getParamType(i);
+            const type = Module.UTF8ToString ? Module.UTF8ToString(typePtr) : 'continuous';
+            
+            console.log(`Parameter ${i}: ${name}, min=${min}, max=${max}, value=${value}, type=${type}`);
+            
+            // Check if this is a boolean parameter based on its actual type
+            const isBoolParam = (type === 'boolean');
+            
+            if (isBoolParam) {
+              // Create boolean parameter control group
+              const paramGroup = document.createElement('div');
+              paramGroup.className = 'param-bool-group';
+              
+              // Create label
+              const label = document.createElement('label');
+              label.textContent = name;
+              label.className = 'param-bool-label';
+              label.htmlFor = `param-${i}`;
+              
+              // Create toggle switch container
+              const toggleContainer = document.createElement('div');
+              toggleContainer.className = 'param-toggle';
+              
+              // Create checkbox input
+              const checkbox = document.createElement('input');
+              checkbox.type = 'checkbox';
+              checkbox.checked = value === 1;
+              checkbox.id = `param-${i}`;
+              
+              // Create slider span
+              const slider = document.createElement('span');
+              slider.className = 'slider';
+              
+              // Create value display
+              const valueDisplay = document.createElement('span');
+              valueDisplay.textContent = value === 1 ? 'ON' : 'OFF';
+              valueDisplay.className = 'param-bool-value';
+              valueDisplay.id = `param-value-${i}`;
+              
+              // Add event listener to update parameter
+              checkbox.addEventListener('change', function(event) {
+                const newValue = event.target.checked ? 1 : 0;
+                Module._setParamValue(i, newValue);
+                valueDisplay.textContent = newValue === 1 ? 'ON' : 'OFF';
+                console.log(`Set boolean parameter ${i} to ${newValue}`);
+              });
+              
+              // Assemble the toggle control
+              toggleContainer.appendChild(checkbox);
+              toggleContainer.appendChild(slider);
+              
+              paramGroup.appendChild(label);
+              paramGroup.appendChild(toggleContainer);
+              paramGroup.appendChild(valueDisplay);
+              paramContainer.appendChild(paramGroup);
+              
+            } else if (type === 'choice') {
+              // Create choice parameter control group
+              const paramGroup = document.createElement('div');
+              paramGroup.className = 'param-group';
+
+              // Create label
+              const label = document.createElement('label');
+              label.textContent = name;
+              label.className = 'param-label';
+
+              // Create select dropdown
+              const select = document.createElement('select');
+              select.className = 'param-choice';
+              select.id = `param-${i}`;
+
+              // Get number of choices
+              const numChoices = Module._getParamNumChoices(i);
+              for (let c = 0; c < numChoices; c++) {
+                const labelPtr = Module._getParamChoiceLabel(i, c);
+                const choiceLabel = Module.UTF8ToString ? Module.UTF8ToString(labelPtr) : `Choice ${c}`;
+                const option = document.createElement('option');
+                option.value = c;
+                option.textContent = choiceLabel;
+                if (c === Math.round(value)) option.selected = true;
+                select.appendChild(option);
+              }
+
+              // Create value display
+              const valueDisplay = document.createElement('span');
+              valueDisplay.textContent = select.options[select.selectedIndex].textContent;
+              valueDisplay.className = 'param-value';
+              valueDisplay.id = `param-value-${i}`;
+
+              // Add event listener to update parameter
+              select.addEventListener('change', function(event) {
+                const newValue = parseInt(event.target.value);
+                Module._setParamValue(i, newValue);
+                valueDisplay.textContent = select.options[select.selectedIndex].textContent;
+                console.log(`Set choice parameter ${i} to ${newValue}`);
+              });
+
+              // Assemble the control
+              paramGroup.appendChild(label);
+              paramGroup.appendChild(select);
+              paramGroup.appendChild(valueDisplay);
+              paramContainer.appendChild(paramGroup);
+            } else {
+              // Create regular parameter control group
+              const paramGroup = document.createElement('div');
+              paramGroup.className = 'param-group';
+              
+              // Create label
+              const label = document.createElement('label');
+              label.textContent = name;
+              label.className = 'param-label';
+              
+              // Create slider
+              const slider = document.createElement('input');
+              slider.type = 'range';
+              slider.min = min;
+              slider.max = max;
+              slider.step = (max - min) / 100; // 100 steps by default
+              slider.value = value;
+              slider.className = 'param-slider';
+              slider.id = `param-${i}`;
+              
+              // Create value display
+              const valueDisplay = document.createElement('span');
+              valueDisplay.textContent = value.toFixed(3);
+              valueDisplay.className = 'param-value';
+              valueDisplay.id = `param-value-${i}`;
+              
+              // Add event listener to update parameter
+              slider.addEventListener('input', function(event) {
+                const newValue = parseFloat(event.target.value);
+                Module._setParamValue(i, newValue);
+                valueDisplay.textContent = newValue.toFixed(3);
+                console.log(`Set parameter ${i} to ${newValue}`);
+              });
+              
+              // Assemble the control
+              paramGroup.appendChild(label);
+              paramGroup.appendChild(slider);
+              paramGroup.appendChild(valueDisplay);
+              paramContainer.appendChild(paramGroup);
+            }
+          }
+          
+          console.log('Parameter controls generation completed');
+          
+        } catch (error) {
+          console.error('Error generating parameter controls:', error);
+        }
+      }
       
       // Function to reset code to default
       function resetToDefault() {
