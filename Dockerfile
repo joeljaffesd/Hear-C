@@ -23,6 +23,9 @@ RUN chmod +x ./run.sh
 # Create build directory and build the project
 RUN mkdir -p build && ./run.sh build
 
+# Set the port environment variable to match the exposed port
+ENV PORT=8080
+
 # Expose port for the Node.js server
 EXPOSE 8080
 
