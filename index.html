@@ -81,7 +81,10 @@
 
     <!-- Error display container for compilation errors -->
     <div id="error-container">
-      <div class="error-header">Compilation Errors</div>
+      <div class="error-header">
+        <span>Compilation Errors</span>
+        <button class="error-close" id="error-close" title="Close error panel">×</button>
+      </div>
       <div class="error-content" id="error-content"></div>
     </div>
 
@@ -345,6 +348,12 @@
           setTimeout(() => {
             updateEditorStatus('Ready');
           }, 2000);
+        });
+
+        // Handle error close button
+        document.getElementById('error-close').addEventListener('click', function(event) {
+          event.preventDefault();
+          document.getElementById('error-container').classList.remove('visible');
         });
 
         // Handle the save button click
