@@ -27,6 +27,7 @@ body {
   border-bottom: 1px solid #444;
   padding: 12px 20px;
   text-align: center;
+  position: relative;
 }
 
 .header h1 {
@@ -34,6 +35,37 @@ body {
   font-weight: 500;
   color: #ffffff;
   margin: 0;
+}
+
+.github-link {
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  color: #8b949e;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.github-link:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.github-icon {
+  width: 24px;
+  height: 24px;
+  transition: all 0.2s ease;
+}
+
+.github-link:hover .github-icon {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.3));
 }
 
 /* Main Content Area */
