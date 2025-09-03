@@ -9,32 +9,41 @@ NOTE: SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
 
 // global instances of objects
 giml::Phasor<float> mOsc{SAMPLE_RATE};
+giml::Chorus<float> mChorus{SAMPLE_RATE};
 giml::Delay<float> mDelay{SAMPLE_RATE};
 giml::EffectsLine<float> mEffectsLine;
 
-// Parameters with intuitive constructor: (name, min, max, default)
-giml::Param<float> frequency{"frequency", 0.f, 3000.f, 220.f};   // min=0, max=3000, def=220
-giml::Param<float> volume{"volume", 0.f, 1.f, 0.5f};             // min=0, max=1, def=0.5
-giml::BoolParam<float> mute{"mute", true};
-giml::ChoiceParam<float> multiplier{"multiplier", 0, 4, 0};
-std::vector<giml::ParamMeta<float>*> params{&frequency, &volume, &mute, &multiplier};
+// Gather parameter pointers from each effect using the public getParams().
+// Keep a parallel vector of the owning effect so callers can build
+// display labels like "Effect: Param" without mutating protected fields.
+static inline std::vector<giml::ParamMeta<float>*> initParams(giml::EffectsLine<float>& effectsLine) {
+  std::vector<giml::ParamMeta<float>*> out;
+  for (auto* eff : effectsLine) {
+    const auto& pvec = eff->getParams();
+    for (auto* p : pvec) {
+      out.push_back(p);
+    }
+  }
+  return out;
+}
 
+// Populate globals at runtime inside init() to avoid static-init order issues
+inline std::vector<giml::ParamMeta<float>*> params;
 
 // init function, called once when app starts
 void init() { 
   std::cout << "Init called!" << std::endl;
-  mDelay.toggle(true);
-  mDelay.setParams();
+  mEffectsLine.pushBack(&mChorus);
   mEffectsLine.pushBack(&mDelay);
-  // Set labels for multiplier choices
-  multiplier.setLabels({"x0", "x1", "x2", "x3", "x4"});
+  // Populate parameters now that effects have been constructed and registered their params
+  params = initParams(mEffectsLine);
 }
 
 // Per-sample audio callback
 // This function must be defined, or compilation will fail!
 float nextSample() {
-  mOsc.setFrequency(frequency());
-  return mEffectsLine.processSample(mOsc.processSample() * volume() * !mute() * 0.25 * multiplier());
+  mOsc.setFrequency(1.f);
+  return mEffectsLine.processSample(mOsc.processSample());
 }
 
 #endif
