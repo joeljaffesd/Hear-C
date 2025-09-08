@@ -2,7 +2,6 @@ const http = require('http');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const url = require('url');
 const crypto = require('crypto');
 const os = require('os');
 
@@ -51,7 +50,14 @@ function serveStaticFile(req, res, filePath) {
         res.end(`Server Error: ${err.code}`);
       }
     } else {
-      res.writeHead(200, { 'Content-Type': contentType });
+      // Add headers required for SharedArrayBuffer and WASM Workers/AudioWorklets
+      const headers = {
+        'Content-Type': contentType,
+        'Cross-Origin-Embedder-Policy': 'require-corp',
+        'Cross-Origin-Opener-Policy': 'same-origin'
+      };
+      
+      res.writeHead(200, headers);
       res.end(content, 'utf-8');
     }
   });
@@ -59,10 +65,12 @@ function serveStaticFile(req, res, filePath) {
 
 // Create a simple HTTP server
 const server = http.createServer((req, res) => {
-  // Enable CORS for browser requests
+  // Enable CORS for browser requests and add headers for SharedArrayBuffer support
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -132,8 +140,8 @@ const server = http.createServer((req, res) => {
             fs.cpSync(gimmelSrcPath, gimmelDestPath, { recursive: true });
           }
           
-          // Build command for temporary directory with Gimmel include path
-          const buildCmd = `cd ${tempDir} && emcc src/main.cpp -o build/index.html -s USE_SDL=2 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,stringToUTF8 -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio,_getParamCount,_getParamName,_getParamMin,_getParamMax,_getParamValue,_setParamValue --shell-file index.html -I./Gimmel/include -O2 && cp styles.css build/ && cp logo.ico build/`;
+          // Build command for temporary directory with AudioWorklet support
+          const buildCmd = `cd ${tempDir} && emcc src/main.cpp -o build/index.html -s AUDIO_WORKLET=1 -s WASM_WORKERS=1 -s ALLOW_MEMORY_GROWTH=1 -s EXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,stringToUTF8 -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio,_isAudioRunning,_getParamCount,_getParamName,_getParamMin,_getParamMax,_getParamValue,_setParamValue,_getParamType,_getParamNumChoices,_getParamChoiceLabel --shell-file index.html -I./Gimmel/include -O2 && cp styles.css build/ && cp logo.ico build/`;
           
           // Execute the build
           exec(buildCmd, (error, stdout, stderr) => {
@@ -306,7 +314,7 @@ const server = http.createServer((req, res) => {
   
   // Serve static files
   if (req.method === 'GET') {
-    const parsedUrl = url.parse(req.url);
+    const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
     const pathname = parsedUrl.pathname;
     
     // Default to index.html if root path is requested

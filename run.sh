@@ -14,12 +14,15 @@ build_project() {
   # 2. Direct compilation with emcc
   echo "Compiling project with emcc..."
   emcc src/main.cpp -o build/index.html \
-    -s USE_SDL=2 \
+    -s AUDIO_WORKLET=1 \
+    -s WASM_WORKERS=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s EXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,stringToUTF8 \
-  -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio,_getParamCount,_getParamName,_getParamMin,_getParamMax,_getParamValue,_setParamValue,_getParamType,_getParamNumChoices,_getParamChoiceLabel \
+  -s EXPORTED_FUNCTIONS=_main,_startAudio,_stopAudio,_isAudioRunning,_getParamCount,_getParamName,_getParamMin,_getParamMax,_getParamValue,_setParamValue,_getParamType,_getParamNumChoices,_getParamChoiceLabel \
     --shell-file index.html \
     -I./Gimmel/include \
+    -s ENVIRONMENT=web \
+    -s SHARED_MEMORY=1 \
     -O2
 
   # 3. Copy static assets

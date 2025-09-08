@@ -1,39 +1,67 @@
-#include <SDL2/SDL.h>
 #include <emscripten.h>
 #include <emscripten/html5.h>
+#include <emscripten/webaudio.h>
 #include <iostream>
 #include <cmath>
 #include <cstring>
 
 // Audio parameters
 #define SAMPLE_RATE 44100
-#define BUFFER_SIZE 1024  // Buffer size in samples
+#define BUFFER_SIZE 128   // AudioWorklet uses smaller buffer sizes
 #define CHANNELS 2        // Stereo
 #include "user.h"
 
 // Global audio state
-SDL_AudioDeviceID audioDevice;
+EMSCRIPTEN_WEBAUDIO_T audioContext = 0;
+EMSCRIPTEN_AUDIO_WORKLET_NODE_T audioWorkletNode = 0;
 bool mainLoopInitialized = false;
+bool audioIsRunning = false;  // Track audio state
+uint8_t audioThreadStack[4096];
 
-// Audio callback function - this is where the audio is generated
-void audioCallback(void* userdata, Uint8* stream, int len) {
-  // Clear the buffer first (silence)
-  SDL_memset(stream, 0, len);
-  
-  // Cast the buffer to float for easier manipulation
-  float* buffer = reinterpret_cast<float*>(stream);
-  int samples = len / sizeof(float) / CHANNELS;
-  
-  // Fill the audio buffer
-  for (int i = 0; i < samples; i++) {
+// Forward declarations
+void AudioThreadInitialized(EMSCRIPTEN_WEBAUDIO_T audioContext, bool success, void *userData);
+void AudioWorkletProcessorCreated(EMSCRIPTEN_WEBAUDIO_T audioContext, bool success, void *userData);
 
-    // Call the user-defined function to get the next sample
-    float sample = nextSample(); // make sure to define this!
-
-    // Write to both channels for stereo
-    buffer[i * CHANNELS] = sample;       // Left channel
-    buffer[i * CHANNELS + 1] = sample;   // Right channel
+// AudioWorklet processor function - this is where the audio is generated
+bool ProcessAudio(int numInputs, const AudioSampleFrame* inputs,
+                 int numOutputs, AudioSampleFrame* outputs,
+                 int numParams, const AudioParamFrame* params,
+                 void* userData) {
+  // Only process audio if it's supposed to be running
+  if (!audioIsRunning) {
+    // Output silence when audio is stopped - using planar format
+    if (numOutputs > 0 && outputs[0].numberOfChannels >= CHANNELS) {
+      int framesToProcess = outputs[0].samplesPerChannel;
+      float* leftChannel = &outputs[0].data[0];
+      float* rightChannel = &outputs[0].data[framesToProcess];
+      
+      for (int i = 0; i < framesToProcess; i++) {
+        leftChannel[i] = 0.0f;   // Left channel
+        rightChannel[i] = 0.0f;  // Right channel
+      }
+    }
+    return true;
   }
+  
+  // We expect one output with stereo channels
+  if (numOutputs > 0 && outputs[0].numberOfChannels >= CHANNELS) {
+    int framesToProcess = outputs[0].samplesPerChannel;
+    
+    // AudioWorklet uses planar format: separate arrays for each channel
+    float* leftChannel = &outputs[0].data[0];  // First channel starts at index 0
+    float* rightChannel = &outputs[0].data[framesToProcess];  // Second channel starts after first channel
+    
+    for (int i = 0; i < framesToProcess; i++) {
+      // Call the user-defined function to get the next sample
+      float sample = nextSample();
+      
+      // Write to both channels using planar format
+      leftChannel[i] = sample;   // Left channel
+      rightChannel[i] = sample;  // Right channel
+    }
+  }
+  
+  return true; // Continue processing
 }
 
 // Main loop function required by Emscripten
@@ -41,16 +69,9 @@ void mainLoop() {
   // Print a message the first time this is called
   if (!mainLoopInitialized) {
     std::cout << "Main loop started! WebAssembly is running." << std::endl;
-    std::cout << "Audio device ID: " << audioDevice << std::endl;
     mainLoopInitialized = true;
     init();
   }
-  
-  // Optional: Uncomment to continuously monitor if needed
-  // static int frameCount = 0;
-  // if (frameCount++ % 60 == 0) {  // Print every ~1 second (assuming 60fps)
-  //   std::cout << "Frame: " << frameCount << ", Freq: " << frequency << std::endl;
-  // }
 }
 
 // Handle key presses to change frequency
@@ -112,17 +133,30 @@ extern "C" {
   // Function to start audio - called from JavaScript
   EMSCRIPTEN_KEEPALIVE
   void startAudio() {
-    // Unpause the audio device
-    SDL_PauseAudioDevice(audioDevice, 0);
-    std::cout << "Audio started from JavaScript" << std::endl;
+    if (audioContext) {
+      // Resume the audio context (required for browser autoplay policies)
+      emscripten_resume_audio_context_sync(audioContext);
+      
+      // Enable audio processing
+      audioIsRunning = true;
+      
+      std::cout << "Audio started" << std::endl;
+    }
   }
   
   // Function to stop audio - called from JavaScript
   EMSCRIPTEN_KEEPALIVE
   void stopAudio() {
-    // Pause the audio device
-    SDL_PauseAudioDevice(audioDevice, 1);
-    std::cout << "Audio stopped from JavaScript" << std::endl;
+    // Stop audio processing (AudioWorklet will continue running but output silence)
+    audioIsRunning = false;
+    
+    std::cout << "Audio stopped" << std::endl;
+  }
+  
+  // Function to check if audio is running - called from JavaScript
+  EMSCRIPTEN_KEEPALIVE
+  bool isAudioRunning() {
+    return audioIsRunning;
   }
   
   // Parameter control functions
@@ -189,47 +223,79 @@ extern "C" {
   }
 }
 
+// Callback when the AudioWorklet processor has been created
+void AudioWorkletProcessorCreated(EMSCRIPTEN_WEBAUDIO_T audioContext, bool success, void *userData) {
+  if (!success) {
+    std::cerr << "Failed to create AudioWorklet processor!" << std::endl;
+    return;
+  }
+
+  int outputChannelCounts[1] = { CHANNELS };
+  EmscriptenAudioWorkletNodeCreateOptions options = {
+    .numberOfInputs = 0,
+    .numberOfOutputs = 1,
+    .outputChannelCounts = outputChannelCounts
+  };
+
+  // Create the AudioWorklet node
+  audioWorkletNode = emscripten_create_wasm_audio_worklet_node(
+    audioContext, 
+    "hear-c-processor", 
+    &options, 
+    ProcessAudio, 
+    0
+  );
+  
+  // Connect to audio output
+  emscripten_audio_node_connect(audioWorkletNode, audioContext, 0, 0);
+  
+  std::cout << "AudioWorklet initialized successfully" << std::endl;
+}
+
+// Callback when the AudioWorklet thread is initialized
+void AudioThreadInitialized(EMSCRIPTEN_WEBAUDIO_T audioContext, bool success, void *userData) {
+  if (!success) {
+    std::cerr << "Failed to initialize AudioWorklet thread!" << std::endl;
+    return;
+  }
+
+  WebAudioWorkletProcessorCreateOptions opts = {
+    .name = "hear-c-processor"
+  };
+  
+  emscripten_create_wasm_audio_worklet_processor_async(
+    audioContext, 
+    &opts, 
+    AudioWorkletProcessorCreated, 
+    0
+  );
+}
+
 int main() {
-  // Initialize SDL
-  if (SDL_Init(SDL_INIT_AUDIO) < 0) {
-    std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
+  // Create an audio context
+  audioContext = emscripten_create_audio_context(0);
+  
+  if (!audioContext) {
+    std::cerr << "Failed to create audio context!" << std::endl;
     return 1;
   }
   
-  // Set up audio specification
-  SDL_AudioSpec want, have;
-  SDL_zero(want);
-  want.freq = SAMPLE_RATE;
-  want.format = AUDIO_F32;
-  want.channels = CHANNELS;
-  want.samples = BUFFER_SIZE;
-  want.callback = audioCallback;
+  std::cout << "Audio context created successfully" << std::endl;
   
-  // Open audio device
-  audioDevice = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
-  if (audioDevice == 0) {
-    std::cerr << "Failed to open audio: " << SDL_GetError() << std::endl;
-    SDL_Quit();
-    return 1;
-  }
-    
-  // Report actual audio format if different from requested
-  if (have.freq != want.freq || have.format != want.format || have.channels != want.channels) {
-    std::cout << "We didn't get the exact audio format we wanted." << std::endl;
-  }
+  // Initialize AudioWorklet thread
+  emscripten_start_wasm_audio_worklet_thread_async(
+    audioContext,
+    audioThreadStack,
+    sizeof(audioThreadStack),
+    AudioThreadInitialized,
+    0
+  );
   
   // Set up keyboard event handling
   emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, 0, keyDownCallback);
   
-  // Note: We don't start audio here - it will be started by the JavaScript button
-  // SDL_PauseAudioDevice(audioDevice, 0);
-  
   // Set up the main loop
   emscripten_set_main_loop(mainLoop, 0, 1);
-  
-  // Cleanup (this code will never be reached in Emscripten)
-  SDL_CloseAudioDevice(audioDevice);
-  SDL_Quit();
   
   return 0;
 }
