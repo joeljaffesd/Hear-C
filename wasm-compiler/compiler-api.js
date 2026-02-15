@@ -44,10 +44,12 @@ class CompilerAPI {
           if (e.data.type === 'ready') {
             this.worker.removeEventListener('message', readyHandler);
             
-            // Initialize the worker
-            this.sendMessage({ type: 'init' })
-              .then(() => {
+            // Initialize the worker with configuration
+            const config = window.HEAR_C_CONFIG || {};
+            this.sendMessage({ type: 'init', config })
+              .then((result) => {
                 this.isReady = true;
+                console.log(`[CompilerAPI] Compiler initialized in ${result.mode} mode`);
                 resolve(true);
               })
               .catch(reject);
