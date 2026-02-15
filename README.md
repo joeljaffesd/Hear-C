@@ -26,14 +26,84 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 
 ### 🛠️ Run Locally
 
+#### Option 1: With Node.js Server (Traditional)
 1. Clone this repo
+2. Make sure you have `emcc` and `node` installed and in path
+3. Run `./run.sh` in a Bash shell
+4. Navigate to http://localhost:3000
 
-2. If you want to build without Docker, make sure you have `emcc` and `node` installed and in path
+#### Option 2: With Docker
+1. Clone this repo
+2. Run `docker build -t hear-c . && docker run --publish 8080:8080 hear-c`
+3. Navigate to http://localhost:8080
 
-3. To build natively, do `./run.sh` in a Bash shell or use `SHIFT`+`CMD`+`B` in VSCode. 
+#### Option 3: Static Site with Client-Side Compilation (New!)
+The project now supports running as a static site with client-side compilation infrastructure:
 
-    To build with Docker, do `docker build -t hear-c . && docker run --publish 8080:8080 hear-c`
+1. Clone this repo
+2. Open `index.html` in a modern browser
+3. The app will use Web Workers for compilation
+4. For C++ to WASM compilation, you have two options:
+   - **Development**: Uses local Node.js server (requires setup as in Option 1)
+   - **Production**: Configure serverless compilation endpoint (see `wasm-compiler/README.md`)
 
-4. If built natively, navigate to http://localhost:3000.
+See the [Client-Side Compilation Guide](wasm-compiler/README.md) for more details on deploying without a server.
 
-    If built with Docker, navigate to http://localhost:8080.
+## Architecture:
+
+Hear-C uses a modern web-based architecture designed for flexibility and performance:
+
+```
+┌─────────────────────────────────────────────┐
+│          Browser (Client-Side)              │
+│                                             │
+│  ┌─────────────┐       ┌──────────────┐    │
+│  │ Monaco      │       │  WebAudio    │    │
+│  │ Editor      │       │  API         │    │
+│  └─────────────┘       └──────────────┘    │
+│         │                      ▲            │
+│         ▼                      │            │
+│  ┌─────────────┐              │            │
+│  │ Compiler    │              │            │
+│  │ API         │              │            │
+│  └──────┬──────┘              │            │
+│         │                      │            │
+│         ▼                      │            │
+│  ┌─────────────┐              │            │
+│  │ Web Worker  │              │            │
+│  │ (Compiler)  │              │            │
+│  └──────┬──────┘              │            │
+│         │                      │            │
+└─────────┼──────────────────────┼────────────┘
+          │                      │
+          ▼                      │
+   ┌─────────────┐               │
+   │ Compilation │               │
+   │ Service     │               │
+   │ (Optional)  │               │
+   └─────────────┘               │
+          │                      │
+          └──────────────────────┘
+               WASM Module
+```
+
+### Components:
+
+1. **Monaco Editor**: Full-featured code editor with C++ syntax highlighting and IntelliSense
+2. **Compiler API**: Manages compilation requests via Web Workers for non-blocking UI
+3. **Web Worker**: Handles C++ to WASM compilation off the main thread
+4. **Compilation Service**: Flexible backend - can be:
+   - Local Node.js server (development)
+   - Embedded wasm-clang (fully client-side)
+   - Serverless function (production deployment)
+5. **WebAudio API**: Plays the synthesized audio from the compiled WASM module
+
+### Compilation Options:
+
+The project supports multiple compilation strategies:
+
+- **Development Mode**: Uses local Emscripten via Node.js server
+- **Client-Side Mode**: (Future) Uses wasm-clang compiled to WebAssembly
+- **Serverless Mode**: Uses stateless cloud function (no server to maintain)
+
+See `wasm-compiler/README.md` for detailed information about each option.
