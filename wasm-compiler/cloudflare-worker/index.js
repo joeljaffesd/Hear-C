@@ -75,7 +75,7 @@ async function compileCode(userCode, mainCode, options) {
   // 4. Return the compiled WASM, JS, and HTML files
   
   // For now, return a placeholder response
-  throw new Error('Container-based compilation not yet configured. Please set up Cloudflare Container bindings or use AWS Lambda.');
+  throw new Error('Container-based compilation not yet configured. See wasm-compiler/README.md for setup instructions. You can configure Cloudflare Container bindings, use AWS Lambda with Docker support, or build wasm-clang binaries following wasm-compiler/BUILD_WASM_CLANG.md');
   
   // Example of what the actual implementation would look like:
   /*

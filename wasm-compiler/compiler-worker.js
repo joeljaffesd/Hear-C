@@ -112,7 +112,7 @@ async function loadWasmClang() {
   // Initialize the Emscripten module
   // Note: This would require the actual Emscripten runtime
   // For now, this is a placeholder
-  throw new Error('wasm-clang initialization not yet implemented - binaries need to be built and hosted. See BUILD_WASM_CLANG.md for instructions.');
+  throw new Error('wasm-clang initialization not yet implemented - binaries need to be built and hosted. See wasm-compiler/BUILD_WASM_CLANG.md for instructions.');
   
   // TODO: Actual implementation would:
   // 1. Instantiate the WASM module with proper Emscripten runtime
@@ -217,7 +217,7 @@ async function compileWithWasmClang(code, options) {
   // 4. Reading the resulting WASM file from virtual filesystem
   // 5. Returning { success: true, wasm: wasmBytes, js: jsGlue, html: htmlShell }
   
-  throw new Error('wasm-clang compilation not yet implemented - see BUILD_WASM_CLANG.md');
+  throw new Error('wasm-clang compilation not yet implemented - see wasm-compiler/BUILD_WASM_CLANG.md for instructions on building and deploying wasm-clang');
 }
 
 /**
