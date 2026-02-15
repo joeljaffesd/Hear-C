@@ -18,6 +18,8 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 - **Monaco Editor** - the same powerful code editor that powers VS Code, with full C++ support
 - **IntelliSense-like features** - syntax highlighting, bracket matching, and intelligent suggestions
 - **One-click rebuilding** - edit, compile, and hear your changes instantly
+- **Client-side compilation infrastructure** - supports embedded wasm-clang, serverless, or local compilation
+- **Web Worker architecture** - non-blocking compilation keeps the UI responsive
 
 ## Getting Started:
 
@@ -107,3 +109,52 @@ The project supports multiple compilation strategies:
 - **Serverless Mode**: Uses stateless cloud function (no server to maintain)
 
 See `wasm-compiler/README.md` for detailed information about each option.
+## Deployment
+
+Hear-C can be deployed in multiple ways:
+
+### Static Site Deployment (Recommended)
+Deploy to any static hosting service (Netlify, Vercel, GitHub Pages, etc.):
+1. Build the initial WASM module: `./run.sh build`
+2. Deploy the entire directory as static files
+3. Configure compilation service (see below)
+
+### Compilation Service Options
+
+**Option A: Use existing Node.js server (traditional)**
+- Deploy `server.js` to a Node.js hosting service
+- Requires Emscripten SDK to be installed
+
+**Option B: Set up serverless compilation (recommended)**
+- Deploy Cloudflare Worker or AWS Lambda with Emscripten
+- No persistent server needed, scales automatically
+- See `wasm-compiler/cloudflare-worker/` for template
+
+**Option C: Embed wasm-clang (fully client-side)**
+- Build wasm-clang binaries (see `wasm-compiler/BUILD_WASM_CLANG.md`)
+- Host on CDN for lazy loading
+- Update `config.js` with CDN URLs
+- Enables fully offline operation
+
+## Contributing
+
+Contributions are welcome! Areas where help is needed:
+
+- 🔧 Building and testing wasm-clang binaries
+- 📝 Improving documentation and examples
+- 🐛 Bug fixes and testing
+- 🎨 UI/UX improvements
+- 🔊 Additional audio synthesis examples
+
+See [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) for technical details about the codebase.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+## Acknowledgments
+
+- Built with [Emscripten](https://emscripten.org/) - the C/C++ to WebAssembly compiler
+- Uses [Monaco Editor](https://microsoft.github.io/monaco-editor/) - the editor that powers VS Code
+- Inspired by [Faust IDE](https://faustide.grame.fr/) and other browser-based audio programming environments
+- wasm-clang infrastructure based on [WebAssembly Studio](https://github.com/wasdk/WebAssemblyStudio) (archived)
