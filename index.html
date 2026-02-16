@@ -9,6 +9,8 @@
     <link rel="shortcut icon" href="logo.ico" type="image/x-icon">
     <!-- Monaco Editor -->
     <script src="https://unpkg.com/monaco-editor@0.44.0/min/vs/loader.js"></script>
+    <!-- Emception Compiler for client-side C++ compilation -->
+    <script src="wasm-compiler/emception-compiler-api.js"></script>
     <!-- Main application styles -->
     <link rel="stylesheet" href="styles.css">
   </head>
@@ -104,6 +106,32 @@
       var outputElement = document.getElementById('output');
       var audioContext = null;
       var audioStarted = false;
+      
+      // Initialize Emception compiler for client-side compilation
+      var emceptionCompiler = null;
+      var isEmceptionReady = false;
+      
+      // Try to initialize Emception (but don't block if it fails)
+      async function initEmception() {
+        try {
+          if (typeof EmceptionCompiler === 'undefined') {
+            console.log('EmceptionCompiler not available, falling back to server');
+            return false;
+          }
+          emceptionCompiler = new EmceptionCompiler();
+          await emceptionCompiler.init();
+          isEmceptionReady = true;
+          console.log('Emception client-side compiler ready!');
+          return true;
+        } catch (error) {
+          console.warn('Failed to initialize Emception:', error);
+          console.log('Will fall back to server-based compilation');
+          return false;
+        }
+      }
+      
+      // Start initializing Emception in the background
+      initEmception().catch(err => console.log('Emception init failed:', err));
 
       var Module = {
         preRun: [],
@@ -237,6 +265,122 @@ float nextSample() {
 }
 
 #endif`;
+
+      // Default main.cpp code (embedded for client-side compilation)
+      const DEFAULT_MAIN_CPP = `#include <SDL2/SDL.h>
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#include <iostream>
+#include <cmath>
+
+// Audio parameters
+#define SAMPLE_RATE 44100
+#define BUFFER_SIZE 1024  // Buffer size in samples
+#define CHANNELS 2        // Stereo
+#include "user.h"
+
+// Global audio state
+SDL_AudioDeviceID audioDevice;
+bool mainLoopInitialized = false;
+
+// Audio callback function - this is where the audio is generated
+void audioCallback(void* userdata, Uint8* stream, int len) {
+  // Clear the buffer first (silence)
+  SDL_memset(stream, 0, len);
+  
+  // Cast the buffer to float for easier manipulation
+  float* buffer = reinterpret_cast<float*>(stream);
+  int samples = len / sizeof(float) / CHANNELS;
+  
+  // Fill the audio buffer
+  for (int i = 0; i < samples; i++) {
+
+    // Call the user-defined function to get the next sample
+    float sample = nextSample(); // make sure to define this!
+
+    // Write to both channels for stereo
+    buffer[i * CHANNELS] = sample;       // Left channel
+    buffer[i * CHANNELS + 1] = sample;   // Right channel
+  }
+}
+
+// Main loop function required by Emscripten
+void mainLoop() {
+  // Print a message the first time this is called
+  if (!mainLoopInitialized) {
+    std::cout << "Main loop started! WebAssembly is running." << std::endl;
+    std::cout << "Audio device ID: " << audioDevice << std::endl;
+    mainLoopInitialized = true;
+    init();
+  }
+}
+
+// Handle key presses to change frequency
+EM_BOOL keyDownCallback(int eventType, const EmscriptenKeyboardEvent* e, void* userData) {
+  // Let all other keys pass through to the browser
+  return EM_FALSE;
+}
+
+// Export functions to JavaScript
+extern "C" {
+  // Function to start audio - called from JavaScript
+  EMSCRIPTEN_KEEPALIVE
+  void startAudio() {
+    // Unpause the audio device
+    SDL_PauseAudioDevice(audioDevice, 0);
+    std::cout << "Audio started from JavaScript" << std::endl;
+  }
+  
+  // Function to stop audio - called from JavaScript
+  EMSCRIPTEN_KEEPALIVE
+  void stopAudio() {
+    // Pause the audio device
+    SDL_PauseAudioDevice(audioDevice, 1);
+    std::cout << "Audio stopped from JavaScript" << std::endl;
+  }
+}
+
+int main() {
+  // Initialize SDL
+  if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+    std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+  
+  // Set up audio specification
+  SDL_AudioSpec want, have;
+  SDL_zero(want);
+  want.freq = SAMPLE_RATE;
+  want.format = AUDIO_F32;
+  want.channels = CHANNELS;
+  want.samples = BUFFER_SIZE;
+  want.callback = audioCallback;
+  
+  // Open audio device
+  audioDevice = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+  if (audioDevice == 0) {
+    std::cerr << "Failed to open audio: " << SDL_GetError() << std::endl;
+    SDL_Quit();
+    return 1;
+  }
+    
+  // Report actual audio format if different from requested
+  if (have.freq != want.freq || have.format != want.format || have.channels != want.channels) {
+    std::cout << "We didn't get the exact audio format we wanted." << std::endl;
+  }
+  
+  // Set up keyboard event handling
+  emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, 0, keyDownCallback);
+  
+  // Set up the main loop
+  emscripten_set_main_loop(mainLoop, 0, 1);
+  
+  // Cleanup (this code will never be reached in Emscripten)
+  SDL_CloseAudioDevice(audioDevice);
+  SDL_Quit();
+  
+  return 0;
+}`;
 
       // Initialize the Monaco editor after the page loads
       window.addEventListener('load', function() {
@@ -536,7 +680,8 @@ float nextSample() {
       }
 
       // Function to handle rebuild from browser
-      function rebuildFromBrowser() {
+      // Function to handle rebuild from browser
+      async function rebuildFromBrowser() {
         const rebuildButton = document.getElementById('rebuildButton');
         
         // Store current scroll position
@@ -561,95 +706,145 @@ float nextSample() {
         // Get the current code from the editor
         const currentCode = editor.getValue();
         
-        // Make a request to the rebuild server with the current code
-        fetch('/rebuild', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            rebuild: true,
-            code: currentCode 
-          }),
-        })
-        .then(response => response.json())
-        .then(data => {
-          console.log("Rebuild response:", data);
-          
-          if (data.success) {
-            // Build successful
-            updateEditorStatus('Build successful! Refreshing...', false);
-            alert("Build successful! Refreshing page...");
-            // Reload the page to get the new build
-            setTimeout(() => {
-              window.location.reload();
-            }, 1000);
-          } else {
-            // Build failed - display errors
-            console.error("Build failed:", data.error);
-            updateEditorStatus('Build failed', true);
+        // Try Emception first, then fall back to server
+        if (isEmceptionReady && emceptionCompiler) {
+          try {
+            console.log("Using Emception for client-side compilation...");
+            updateEditorStatus('Compiling with Emception...', false);
             
-            // Show error container if available
-            if (errorContainer) {
-              const errorContent = document.getElementById('error-content');
-              if (errorContent) {
-                // Clear previous errors
-                errorContent.innerHTML = '';
-                
-                // Add error details
-                if (data.errorDetails && data.errorDetails.length) {
-                  data.errorDetails.forEach(error => {
-                    const errorLine = document.createElement('div');
-                    errorLine.className = 'error-line error';
-                    errorLine.textContent = error;
-                    errorContent.appendChild(errorLine);
-                  });
-                } else if (data.stderr) {
-                  // If no parsed errors, show raw stderr
-                  const stderrLines = data.stderr.split('\n');
-                  stderrLines.forEach(line => {
-                    const errorLine = document.createElement('div');
-                    if (line.includes('error:')) {
-                      errorLine.className = 'error-line error';
-                    } else if (line.includes('warning:')) {
-                      errorLine.className = 'error-line warning';
-                    } else {
-                      errorLine.className = 'error-line';
-                    }
-                    errorLine.textContent = line;
-                    errorContent.appendChild(errorLine);
-                  });
+            const result = await emceptionCompiler.compile(currentCode, DEFAULT_MAIN_CPP);
+            
+            if (result.success) {
+              // Build successful
+              updateEditorStatus('Build successful! Refreshing...', false);
+              alert("Build successful with client-side compiler! The page will refresh.");
+              
+              // TODO: Instead of reloading, we should dynamically load the new WASM
+              // For now, we'll just inform the user
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            } else {
+              // Build failed - display errors
+              console.error("Build failed:", result.error);
+              updateEditorStatus('Build failed', true);
+              
+              // Show error container if available
+              if (errorContainer) {
+                const errorContent = document.getElementById('error-content');
+                if (errorContent) {
+                  errorContent.innerHTML = '';
+                  
+                  const errorLine = document.createElement('div');
+                  errorLine.className = 'error-line error';
+                  errorLine.textContent = result.stderr || result.error;
+                  errorContent.appendChild(errorLine);
+                  
+                  errorContainer.classList.add('visible');
                 }
-                
-                // Make the error container visible
-                errorContainer.classList.add('visible');
               }
+              
+              rebuildButton.textContent = "🔨 Build & Run";
             }
-            
-            // Update button
-            rebuildButton.textContent = "⚒️ Build & Run";
+          } catch (error) {
+            console.error("Emception compilation error:", error);
+            updateEditorStatus('Build error', true);
+            alert("Client-side compilation failed: " + error.message);
+            rebuildButton.textContent = "🔨 Build & Run";
           }
-        })
-        .catch(error => {
-          console.error("Error during rebuild:", error);
-          updateEditorStatus('Build error', true);
-          alert("Error during rebuild. Make sure the rebuild server is running.");
-          rebuildButton.textContent = "⚒️ Build & Run";
-        })
-        .finally(() => {
-          // Restore scroll position
-          window.scrollTo({
-            top: scrollPosition,
-            behavior: 'instant'
-          });
+        } else {
+          // Fall back to server-based compilation
+          console.log("Emception not ready, using server-based compilation...");
           
-          setTimeout(() => {
-            rebuildButton.disabled = false;
-            if (rebuildButton.textContent === "Building...") {
-              rebuildButton.textContent = "⚒️ Build & Run";
+          fetch('/rebuild', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              rebuild: true,
+              code: currentCode 
+            }),
+          })
+          .then(response => response.json())
+          .then(data => {
+            console.log("Rebuild response:", data);
+            
+            if (data.success) {
+              // Build successful
+              updateEditorStatus('Build successful! Refreshing...', false);
+              alert("Build successful! Refreshing page...");
+              // Reload the page to get the new build
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            } else {
+              // Build failed - display errors
+              console.error("Build failed:", data.error);
+              updateEditorStatus('Build failed', true);
+              
+              // Show error container if available
+              if (errorContainer) {
+                const errorContent = document.getElementById('error-content');
+                if (errorContent) {
+                  // Clear previous errors
+                  errorContent.innerHTML = '';
+                  
+                  // Add error details
+                  if (data.errorDetails && data.errorDetails.length) {
+                    data.errorDetails.forEach(error => {
+                      const errorLine = document.createElement('div');
+                      errorLine.className = 'error-line error';
+                      errorLine.textContent = error;
+                      errorContent.appendChild(errorLine);
+                    });
+                  } else if (data.stderr) {
+                    // If no parsed errors, show raw stderr
+                    const stderrLines = data.stderr.split('\n');
+                    stderrLines.forEach(line => {
+                      const errorLine = document.createElement('div');
+                      if (line.includes('error:')) {
+                        errorLine.className = 'error-line error';
+                      } else if (line.includes('warning:')) {
+                        errorLine.className = 'error-line warning';
+                      } else {
+                        errorLine.className = 'error-line';
+                      }
+                      errorLine.textContent = line;
+                      errorContent.appendChild(errorLine);
+                    });
+                  }
+                  
+                  // Make the error container visible
+                  errorContainer.classList.add('visible');
+                }
+              }
+              
+              // Update button
+              rebuildButton.textContent = "🔨 Build & Run";
             }
-          }, 3000);
-        });
+          })
+          .catch(error => {
+            console.error("Error during server rebuild:", error);
+            updateEditorStatus('Build error', true);
+            alert("Server-based compilation failed. Emception client-side compiler is now being used instead. Please try again or run the Node.js server with './run.sh' if you prefer server-based compilation.");
+            rebuildButton.textContent = "🔨 Build & Run";
+          })
+          .finally(() => {
+            // Restore scroll position
+            window.scrollTo({
+              top: scrollPosition,
+              behavior: 'instant'
+            });
+            
+            setTimeout(() => {
+              rebuildButton.disabled = false;
+              if (rebuildButton.textContent === "Building...") {
+                rebuildButton.textContent = "🔨 Build & Run";
+              }
+                        }, 3000);
+          });
+        }
       }
 
 
