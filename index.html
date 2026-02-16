@@ -815,6 +815,60 @@ int main() {
               }, 1000);
             } else {
               // Build failed - display errors
+              console.error("Build failed:", result.error);
+              updateEditorStatus('Build failed', true);
+              
+              // Show error container if available
+              if (errorContainer) {
+                const errorContent = document.getElementById('error-content');
+                if (errorContent) {
+                  errorContent.innerHTML = '';
+                  
+                  const errorLine = document.createElement('div');
+                  errorLine.className = 'error-line error';
+                  errorLine.textContent = result.stderr || result.error;
+                  errorContent.appendChild(errorLine);
+                  
+                  errorContainer.classList.add('visible');
+                }
+              }
+              
+              rebuildButton.textContent = "🔨 Build & Run";
+            }
+          } catch (error) {
+            console.error("Emception compilation error:", error);
+            updateEditorStatus('Build error', true);
+            alert("Client-side compilation failed: " + error.message);
+            rebuildButton.textContent = "🔨 Build & Run";
+          }
+        } else {
+          // Fall back to server-based compilation
+          console.log("Emception not ready, using server-based compilation...");
+          
+          fetch('/rebuild', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              rebuild: true,
+              code: currentCode 
+            }),
+          })
+          .then(response => response.json())
+          .then(data => {
+            console.log("Rebuild response:", data);
+            
+            if (data.success) {
+              // Build successful
+              updateEditorStatus('Build successful! Refreshing...', false);
+              alert("Build successful! Refreshing page...");
+              // Reload the page to get the new build
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            } else {
+              // Build failed - display errors
               console.error("Build failed:", data.error);
               updateEditorStatus('Build failed', true);
               
