@@ -130,25 +130,37 @@
       // Try to initialize Emception (but don't block if it fails)
       async function initEmception() {
         try {
+          console.log('[Emception Init] Starting initialization...');
+          
           // Check if we're running from file:// protocol
           if (window.location.protocol === 'file:') {
-            console.log('Running from file:// protocol. Emception requires an HTTP server.');
-            console.log('Please serve this directory with a web server (e.g., python3 -m http.server)');
+            console.warn('[Emception Init] Running from file:// protocol. Emception requires an HTTP server.');
+            console.log('[Emception Init] Please serve this directory with a web server (e.g., python3 -m http.server)');
             return false;
           }
           
+          console.log('[Emception Init] Checking if EmceptionCompiler is available...');
           if (typeof EmceptionCompiler === 'undefined') {
-            console.log('EmceptionCompiler not available, falling back to server');
+            console.error('[Emception Init] EmceptionCompiler not available! Check if emception-compiler-api.js loaded correctly.');
+            console.log('[Emception Init] Falling back to server-based compilation');
             return false;
           }
+          
+          console.log('[Emception Init] EmceptionCompiler found, creating instance...');
           emceptionCompiler = new EmceptionCompiler();
+          
+          console.log('[Emception Init] Calling init()...');
           await emceptionCompiler.init();
+          
           isEmceptionReady = true;
-          console.log('Emception client-side compiler ready!');
+          console.log('[Emception Init] ✅ Emception client-side compiler ready!');
+          console.log('[Emception Init] Compilation will happen in the browser without server');
           return true;
         } catch (error) {
-          console.warn('Failed to initialize Emception:', error);
-          console.log('Will fall back to server-based compilation');
+          console.error('[Emception Init] ❌ Failed to initialize Emception:', error);
+          console.error('[Emception Init] Error details:', error.message);
+          console.error('[Emception Init] Stack trace:', error.stack);
+          console.warn('[Emception Init] Will fall back to server-based compilation');
           return false;
         }
       }

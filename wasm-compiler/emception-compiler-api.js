@@ -25,41 +25,55 @@ class EmceptionCompiler {
    */
   async init() {
     if (this.isReady) {
+      console.log('[EmceptionCompiler] Already initialized');
       return true;
     }
 
     return new Promise((resolve, reject) => {
       try {
+        console.log('[EmceptionCompiler] Creating module worker...');
         // Create the Emception worker as a module worker
         this.worker = new Worker('wasm-compiler/emception-worker.js', { type: 'module' });
+        console.log('[EmceptionCompiler] Worker created successfully');
         
         // Set up message handling
         this.worker.onmessage = (e) => this.handleMessage(e);
         this.worker.onerror = (error) => {
           console.error('[EmceptionCompiler] Worker error:', error);
+          console.error('[EmceptionCompiler] Error message:', error.message);
+          console.error('[EmceptionCompiler] Error filename:', error.filename);
+          console.error('[EmceptionCompiler] Error line:', error.lineno);
           reject(error);
         };
 
+        console.log('[EmceptionCompiler] Waiting for worker ready message...');
         // Wait for worker ready message
         const readyHandler = (e) => {
+          console.log('[EmceptionCompiler] Received message from worker:', e.data.type);
           if (e.data.type === 'ready') {
             this.worker.removeEventListener('message', readyHandler);
             
+            console.log('[EmceptionCompiler] Worker is ready, sending init message...');
             // Initialize the worker
             this.sendMessage({ type: 'init' })
               .then(() => {
                 this.isReady = true;
-                console.log('[EmceptionCompiler] Emception compiler ready');
+                console.log('[EmceptionCompiler] ✅ Emception compiler ready');
                 resolve(true);
               })
-              .catch(reject);
+              .catch((err) => {
+                console.error('[EmceptionCompiler] Failed to initialize worker:', err);
+                reject(err);
+              });
           }
         };
         
         this.worker.addEventListener('message', readyHandler);
         
       } catch (error) {
-        console.error('[EmceptionCompiler] Failed to initialize:', error);
+        console.error('[EmceptionCompiler] Failed to create worker:', error);
+        console.error('[EmceptionCompiler] Error details:', error.message);
+        console.error('[EmceptionCompiler] Stack trace:', error.stack);
         reject(error);
       }
     });

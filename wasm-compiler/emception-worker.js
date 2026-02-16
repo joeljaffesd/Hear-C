@@ -7,8 +7,29 @@
  * Note: This is an ES6 module worker to support Emception's ES6 module structure.
  */
 
+console.log('[Emception Worker] Starting worker initialization...');
+
 // Import Emception as ES6 module
-import Emception from './emception/emception.js';
+let Emception;
+try {
+  console.log('[Emception Worker] Attempting to import Emception module...');
+  Emception = await import('./emception/emception.js');
+  if (Emception.default) {
+    Emception = Emception.default;
+  }
+  console.log('[Emception Worker] ✅ Emception module imported successfully');
+} catch (error) {
+  console.error('[Emception Worker] ❌ Failed to import Emception:', error);
+  console.error('[Emception Worker] Error details:', error.message);
+  console.error('[Emception Worker] Stack trace:', error.stack);
+  // Notify main thread of the error
+  postMessage({ 
+    type: 'error', 
+    error: 'Failed to load Emception module: ' + error.message,
+    stack: error.stack
+  });
+  throw error;
+}
 
 let emceptionInstance = null;
 let isInitialized = false;
