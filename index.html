@@ -183,6 +183,60 @@
       let editorActive = false; // Track if editor is active
       const STORAGE_KEY = 'hear_c_user_code';
       const DEFAULT_CODE_KEY = 'hear_c_default_code';
+      
+      // Default user.h code (embedded for client-side operation)
+      const DEFAULT_USER_CODE = `#ifndef USER_H
+#define USER_H
+
+/*
+NOTE: SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
+*/
+
+// object definition
+class SinOsc {
+private:
+  float mPhase = 0.f; 
+  float mSampleRate = 0.f;
+  float mFrequency = 440.f;
+
+public:
+  SinOsc() = delete;
+  SinOsc(float sampleRate) {
+    this->mSampleRate = sampleRate;
+  }
+
+  float freq() { return mFrequency; }
+  void freq(float newFreq) { this->mFrequency = newFreq; }
+
+  float processSample() {
+    mPhase += 2.0f * M_PI * mFrequency / mSampleRate;
+    if (mPhase > 2.0f * M_PI) {
+      mPhase -= 2.0f * M_PI;  // Keep phase in the [0, 2π] range
+    }
+    return std::sin(mPhase);
+  }
+
+  float operator()() {
+    return this->processSample();
+  }
+};
+
+// global instance of object
+SinOsc mOsc{SAMPLE_RATE};
+
+// init function, called once when app starts
+void init() { 
+  std::cout << "Init called!" << std::endl;
+  mOsc.freq(220.f);
+}
+
+// per-sample callback, no input (yet)
+// this must be defined, or compilation will fail
+float nextSample() {
+  return mOsc();
+}
+
+#endif`;
 
       // Initialize the Monaco editor after the page loads
       window.addEventListener('load', function() {
@@ -275,7 +329,7 @@
         });
       });
 
-      // Function to load the source code (localStorage first, then server default)
+      // Function to load the source code (localStorage first, then embedded default)
       function loadSourceCode() {
         // Try to load from localStorage first
         const savedCode = localStorage.getItem(STORAGE_KEY);
@@ -290,28 +344,15 @@
           return;
         }
         
-        // No saved code, load default from server
-        console.log('Loading default code from server');
-        fetch('/source')
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.text();
-          })
-          .then(code => {
-            originalCode = code;
-            if (editor) {
-              editor.setValue(code);
-            }
-            // Store the default code for reference
-            localStorage.setItem(DEFAULT_CODE_KEY, code);
-            console.log('Default source code loaded and cached');
-          })
-          .catch(error => {
-            console.error('Error loading source code:', error);
-            alert('Failed to load default source code. Make sure the server is running.');
-          });
+        // No saved code, use embedded default code
+        console.log('Loading embedded default code');
+        originalCode = DEFAULT_USER_CODE;
+        if (editor) {
+          editor.setValue(DEFAULT_USER_CODE);
+        }
+        // Store the default code for reference
+        localStorage.setItem(DEFAULT_CODE_KEY, DEFAULT_USER_CODE);
+        console.log('Default source code loaded from embedded code');
       }
 
       // Function to save the source code to localStorage
@@ -443,51 +484,22 @@
         // Clear saved code from localStorage
         localStorage.removeItem(STORAGE_KEY);
         
-        // Check if we have cached default code first
-        const cachedDefault = localStorage.getItem(DEFAULT_CODE_KEY);
-        
-        if (cachedDefault && editor) {
-          // Use cached default if available
-          editor.setValue(cachedDefault);
-          console.log('Code reset to cached default');
+        // Use embedded default code
+        if (editor) {
+          editor.setValue(DEFAULT_USER_CODE);
+          // Cache the default code for future use
+          localStorage.setItem(DEFAULT_CODE_KEY, DEFAULT_USER_CODE);
+          console.log('Code reset to embedded default');
           updateEditorStatus('Reset to default');
           setTimeout(() => {
             updateEditorStatus('Ready');
           }, 2000);
         } else {
-          // Fetch fresh default from server
-          console.log('Fetching default code from server');
-          updateEditorStatus('Loading default...', false);
-          
-          fetch('/source')
-            .then(response => {
-              if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-              }
-              return response.text();
-            })
-            .then(code => {
-              if (editor) {
-                editor.setValue(code);
-                // Cache the default code for future use
-                localStorage.setItem(DEFAULT_CODE_KEY, code);
-                console.log('Code reset to server default');
-                updateEditorStatus('Reset to default');
-                setTimeout(() => {
-                  updateEditorStatus('Ready');
-                }, 2000);
-              } else {
-                throw new Error('Editor not available');
-              }
-            })
-            .catch(error => {
-              console.error('Error loading default code:', error);
-              updateEditorStatus('Reset failed', true);
-              alert('Failed to load default code from server. Please check your connection.');
-              setTimeout(() => {
-                updateEditorStatus('Ready');
-              }, 3000);
-            });
+          console.error('Editor not available');
+          updateEditorStatus('Reset failed', true);
+          setTimeout(() => {
+            updateEditorStatus('Ready');
+          }, 3000);
         }
       }
 
