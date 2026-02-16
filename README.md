@@ -14,11 +14,12 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 ## Features:
 
 - **Real-time audio synthesis** using WebAssembly and WebAudio API
+- **Truly client-side compilation** - uses Emception (Emscripten compiled to WASM) for in-browser C++ compilation
+- **No server required** - runs entirely in your browser, works offline after first load
 - **LocalStorage persistence** - your code is saved in your browser and persists between sessions
 - **Monaco Editor** - the same powerful code editor that powers VS Code, with full C++ support
 - **IntelliSense-like features** - syntax highlighting, bracket matching, and intelligent suggestions
 - **One-click rebuilding** - edit, compile, and hear your changes instantly
-- **Client-side compilation infrastructure** - supports embedded wasm-clang, serverless, or local compilation
 - **Web Worker architecture** - non-blocking compilation keeps the UI responsive
 
 ## Getting Started:
@@ -94,19 +95,22 @@ Hear-C uses a modern web-based architecture designed for flexibility and perform
 1. **Monaco Editor**: Full-featured code editor with C++ syntax highlighting and IntelliSense
 2. **Compiler API**: Manages compilation requests via Web Workers for non-blocking UI
 3. **Web Worker**: Handles C++ to WASM compilation off the main thread
-4. **Compilation Service**: Flexible backend - can be:
-   - Local Node.js server (development)
-   - Embedded wasm-clang (fully client-side)
-   - Serverless function (production deployment)
+4. **Emception**: Emscripten (C++ to WASM compiler) running entirely in WebAssembly
+   - Clang/LLVM compiled to WASM
+   - Complete C++ standard library and SDL2 support
+   - ~15-20MB download (lazy-loaded, cached for offline use)
 5. **WebAudio API**: Plays the synthesized audio from the compiled WASM module
 
-### Compilation Options:
+### Compilation:
 
-The project supports multiple compilation strategies:
+The project now uses **Emception** for true client-side compilation:
 
-- **Development Mode**: Uses local Emscripten via Node.js server
-- **Client-Side Mode**: (Future) Uses wasm-clang compiled to WebAssembly
-- **Serverless Mode**: Uses stateless cloud function (no server to maintain)
+- **Emception Mode** (Default): Uses Emscripten compiled to WebAssembly, runs entirely in browser
+  - No server required
+  - Works offline after first load
+  - Complete C++ and SDL2 support
+  - 2-5 second compilation time
+- **Alternative Modes**: Local server (development) or serverless (optional deployment)
 
 See `wasm-compiler/README.md` for detailed information about each option.
 ## Deployment

@@ -10,10 +10,18 @@
   "engines": {
     "node": ">=14.0.0"
   },
-  "keywords": ["audio", "cpp", "webassembly", "emscripten", "dsp"],
+  "keywords": [
+    "audio",
+    "cpp",
+    "webassembly",
+    "emscripten",
+    "dsp"
+  ],
   "author": "joeljaffesd",
   "license": "MIT",
-  "dependencies": {},
+  "dependencies": {
+    "emception": "^1.0.15"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/joeljaffesd/Hear-C.git"

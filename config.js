@@ -8,11 +8,24 @@ window.HEAR_C_CONFIG = {
   /**
    * Compilation mode:
    * - 'auto': Automatically detect best available method
+   * - 'emception': Use embedded Emception (Emscripten in browser)
    * - 'wasm-clang': Use embedded wasm-clang (requires binaries)
    * - 'serverless': Use serverless compilation endpoint
    * - 'local-server': Use local Node.js server (development only)
    */
-  compilationMode: 'auto',
+  compilationMode: 'emception', // Changed from 'auto' to use Emception by default
+  
+  /**
+   * Emception configuration (Emscripten running in browser)
+   * Enabled by default - provides true client-side compilation
+   */
+  emception: {
+    enabled: true,
+    // Path to emception worker
+    workerPath: 'wasm-compiler/emception-worker.js',
+    // Show compilation output in console
+    showOutput: true,
+  },
   
   /**
    * wasm-clang configuration
