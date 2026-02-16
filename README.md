@@ -40,15 +40,36 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 2. Run `docker build -t hear-c . && docker run --publish 8080:8080 hear-c`
 3. Navigate to http://localhost:8080
 
-#### Option 3: Static Site with Client-Side Compilation (New!)
-The project now supports running as a static site with client-side compilation infrastructure:
+#### Option 3: Static Site with Client-Side Compilation
+The project includes Emception for client-side C++ compilation. **Note**: Due to ES6 module requirements, the app must be served via HTTP (not opened as `file://`).
 
-1. Clone this repo
-2. Open `index.html` in a modern browser
-3. The app will use Web Workers for compilation
-4. For C++ to WASM compilation, you have two options:
-   - **Development**: Uses local Node.js server (requires setup as in Option 1)
-   - **Production**: Configure serverless compilation endpoint (see `wasm-compiler/README.md`)
+**Simple HTTP Server (Recommended for Local Testing):**
+```bash
+# Clone this repo
+git clone https://github.com/joeljaffesd/Hear-C.git
+cd Hear-C
+
+# Serve with Python (no build needed)
+python3 -m http.server 8000
+# OR use Node.js
+npx http-server -p 8000
+# OR use PHP
+php -S localhost:8000
+
+# Open http://localhost:8000 in your browser
+```
+
+**What works:**
+- ✅ Monaco editor loads with default C++ code
+- ✅ Edit code with full IntelliSense
+- ✅ "Build & Run" uses Emception (client-side compiler)
+- ✅ Audio synthesis works
+- ✅ No Emscripten/Node.js build environment needed
+
+**Known Limitation:**
+- Opening `index.html` directly as `file://` won't work due to ES6 module CORS restrictions
+- Must be served via HTTP (any simple web server works)
+- For offline use, use the Node.js server (Option 1) or build a bundled version
 
 See the [Client-Side Compilation Guide](wasm-compiler/README.md) for more details on deploying without a server.
 

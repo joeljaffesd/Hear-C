@@ -15,6 +15,22 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
+    <!-- Protocol Warning (shown only when accessing via file://) -->
+    <div id="protocol-warning" style="display: none; position: fixed; top: 0; left: 0; right: 0; background: #ff6b6b; color: white; padding: 15px; text-align: center; z-index: 10000; font-family: Arial, sans-serif;">
+      <strong>⚠️ File Protocol Detected</strong><br>
+      This app requires an HTTP server to work properly. Please serve it with:<br>
+      <code style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 3px;">python3 -m http.server 8000</code> or 
+      <code style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 3px;">npx http-server -p 8000</code><br>
+      Then open <code style="background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 3px;">http://localhost:8000</code>
+      <button onclick="document.getElementById('protocol-warning').style.display='none'" style="margin-left: 15px; padding: 5px 15px; cursor: pointer;">Dismiss</button>
+    </div>
+    <script>
+      // Show warning if accessed via file:// protocol
+      if (window.location.protocol === 'file:') {
+        document.getElementById('protocol-warning').style.display = 'block';
+      }
+    </script>
+    
     <!-- Main IDE Layout inspired by Faust IDE -->
     <div class="ide-layout">
       <!-- Header -->
@@ -114,6 +130,13 @@
       // Try to initialize Emception (but don't block if it fails)
       async function initEmception() {
         try {
+          // Check if we're running from file:// protocol
+          if (window.location.protocol === 'file:') {
+            console.log('Running from file:// protocol. Emception requires an HTTP server.');
+            console.log('Please serve this directory with a web server (e.g., python3 -m http.server)');
+            return false;
+          }
+          
           if (typeof EmceptionCompiler === 'undefined') {
             console.log('EmceptionCompiler not available, falling back to server');
             return false;

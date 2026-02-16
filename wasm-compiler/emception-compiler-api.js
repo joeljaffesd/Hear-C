@@ -30,8 +30,8 @@ class EmceptionCompiler {
 
     return new Promise((resolve, reject) => {
       try {
-        // Create the Emception worker
-        this.worker = new Worker('wasm-compiler/emception-worker.js');
+        // Create the Emception worker as a module worker
+        this.worker = new Worker('wasm-compiler/emception-worker.js', { type: 'module' });
         
         // Set up message handling
         this.worker.onmessage = (e) => this.handleMessage(e);

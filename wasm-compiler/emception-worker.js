@@ -3,10 +3,12 @@
  * 
  * This worker uses Emception (Emscripten compiled to WASM) to compile C++ code
  * entirely in the browser without any server dependencies.
+ * 
+ * Note: This is an ES6 module worker to support Emception's ES6 module structure.
  */
 
-// Import Emception
-importScripts('emception/emception.js');
+// Import Emception as ES6 module
+import Emception from './emception/emception.js';
 
 let emceptionInstance = null;
 let isInitialized = false;
@@ -23,12 +25,7 @@ async function initializeEmception() {
     postMessage({ type: 'status', message: 'Loading Emception compiler (this may take a moment)...' });
     
     // Create new Emception instance
-    const Emception = window.Emception || self.Emception;
-    if (!Emception || !Emception.default) {
-      throw new Error('Emception module not loaded. Make sure emception.js is in the correct path.');
-    }
-    
-    emceptionInstance = new Emception.default();
+    emceptionInstance = new Emception();
     
     // Set up callbacks for output
     emceptionInstance.onstdout = (...args) => {
