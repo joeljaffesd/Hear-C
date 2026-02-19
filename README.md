@@ -14,6 +14,7 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 ## Features:
 
 - **Real-time audio synthesis** using WebAssembly and WebAudio API
+- **Client-side C++ compilation** powered by [wasm-clang](https://github.com/binji/wasm-clang) — no server-side build step required
 - **LocalStorage persistence** - your code is saved in your browser and persists between sessions
 - **Monaco Editor** - the same powerful code editor that powers VS Code, with full C++ support
 - **IntelliSense-like features** - syntax highlighting, bracket matching, and intelligent suggestions
@@ -28,12 +29,12 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 
 1. Clone this repo
 
-2. If you want to build without Docker, make sure you have `emcc` and `node` installed and in path
+2. Make sure you have `node` installed (no Emscripten required)
 
-3. To build natively, do `./run.sh` in a Bash shell or use `SHIFT`+`CMD`+`B` in VSCode. 
+3. Start the server: `./run.sh` or `npm start`
 
-    To build with Docker, do `docker build -t hear-c . && docker run --publish 8080:8080 hear-c`
+    To run with Docker: `docker build -t hear-c . && docker run --publish 8080:8080 hear-c`
 
-4. If built natively, navigate to http://localhost:3000.
+4. Navigate to http://localhost:3000 (or http://localhost:8080 for Docker)
 
-    If built with Docker, navigate to http://localhost:8080.
+> **Note:** C++ compilation happens entirely in the browser using wasm-clang. The first build may take a moment to download the compiler toolchain (~50 MB).

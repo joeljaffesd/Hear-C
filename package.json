@@ -4,13 +4,12 @@
   "description": "A Browser-Based Development Environment for C++ Audio",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "build": "./run.sh build"
+    "start": "node server.js"
   },
   "engines": {
     "node": ">=14.0.0"
   },
-  "keywords": ["audio", "cpp", "webassembly", "emscripten", "dsp"],
+  "keywords": ["audio", "cpp", "webassembly", "wasm-clang", "dsp"],
   "author": "joeljaffesd",
   "license": "MIT",
   "dependencies": {},

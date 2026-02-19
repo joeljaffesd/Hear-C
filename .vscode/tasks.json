@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build and Run",
+            "label": "Start Server",
             "type": "shell",
             "command": "${workspaceFolder}/run.sh",
             "group": {
@@ -13,16 +13,6 @@
                 "reveal": "always",
                 "panel": "new",
                 "focus": true
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Clean Build",
-            "type": "shell",
-            "command": "rm -rf ${workspaceFolder}/build && mkdir ${workspaceFolder}/build",
-            "presentation": {
-                "reveal": "always",
-                "panel": "new"
             },
             "problemMatcher": []
         }

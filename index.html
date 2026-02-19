@@ -34,7 +34,7 @@
         <div class="editor-section">
           <div class="editor-header">
             <div class="editor-title">user.h</div>
-            <div class="editor-status" id="editor-status">Ready</div>
+            <div class="editor-status" id="editor-status">Loading compiler...</div>
           </div>
           <div id="monaco-editor"></div>
         </div>
@@ -42,16 +42,16 @@
         <!-- Right Panel: Controls -->
         <div class="right-panel">
           <div class="panel-section">
-            <h3>Build & Run</h3>
+            <h3>Build &amp; Run</h3>
             <div class="control-group">
               <button id="saveButton" class="panel-button save" type="button">
-                💾 Save
+                &#x1F4BE; Save
               </button>
               <button id="rebuildButton" class="panel-button build" disabled>
-                🔨 Build & Run
+                &#x1F528; Build &amp; Run
               </button>
               <button id="resetButton" class="panel-button reset" type="button">
-                🔄 Reset to Default
+                &#x1F504; Reset to Default
               </button>
             </div>
           </div>
@@ -60,7 +60,7 @@
             <h3>Audio Control</h3>
             <div class="control-group">
               <button id="startAudio" class="panel-button audio" disabled>
-                ▶️ Start Audio
+                &#x25B6;&#xFE0F; Start Audio
               </button>
             </div>
           </div>
@@ -73,7 +73,7 @@
         <div class="console-header">
           <h3>Console Output</h3>
           <div class="console-controls">
-            <button id="clearConsole" class="console-button">🗑️ Clear</button>
+            <button id="clearConsole" class="console-button">&#x1F5D1;&#xFE0F; Clear</button>
           </div>
         </div>
         <div class="console-content">
@@ -86,116 +86,63 @@
     <div id="error-container">
       <div class="error-header">
         <span>Compilation Errors</span>
-        <button class="error-close" id="error-close" title="Close error panel">×</button>
+        <button class="error-close" id="error-close" title="Close error panel">&times;</button>
       </div>
       <div class="error-content" id="error-content"></div>
     </div>
 
-    <!-- Hidden Emscripten Elements -->
-    <div class="emscripten" style="display: none;">
-      <div id="status">Downloading...</div>
-      <progress value="0" max="100" id="progress" hidden></progress>  
-      <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
-    </div>
-
     <script type='text/javascript'>
-      var statusElement = document.getElementById('status');
-      var progressElement = document.getElementById('progress');
       var outputElement = document.getElementById('output');
       var audioContext = null;
       var audioStarted = false;
+      var compiledWasmModule = null;
+      var scriptNode = null;
+      var wasmInstance = null;
 
-      var Module = {
-        preRun: [],
-        postRun: [],  // Change this to an array instead of a function
-        print: (function() {
-          outputElement.value = ''; // Clear output on start
-          return function(text) {
-            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-            console.log(text);
-            outputElement.value += text + "\n";
-            outputElement.scrollTop = outputElement.scrollHeight;
-          };
-        })(),
-        canvas: (function() {
-          var canvas = document.getElementById('canvas');
-          canvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
-          return canvas;
-        })(),
-        setStatus: function(text) {
-          if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
-          if (text === Module.setStatus.last.text) return;
-          var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-          var now = Date.now();
-          if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
-          Module.setStatus.last.time = now;
-          Module.setStatus.last.text = text;
-          if (m) {
-            text = m[1];
-            progressElement.value = parseInt(m[2])*100;
-            progressElement.max = parseInt(m[4])*100;
-            progressElement.hidden = false;
-          } else {
-            progressElement.value = null;
-            progressElement.max = null;
-            progressElement.hidden = true;
-            
-            // Enable buttons when status indicates loading is complete
-            if (text === 'All downloads complete.') {
-              console.log("Enabling audio and rebuild buttons");
-              const audioButton = document.getElementById('startAudio');
-              const rebuildButton = document.getElementById('rebuildButton');
-              if (audioButton) {
-                audioButton.disabled = false;
-              }
-              if (rebuildButton) {
-                rebuildButton.disabled = false;
-              }
-            }
-          }
-          statusElement.innerHTML = text;
-        },
-        totalDependencies: 0,
-        monitorRunDependencies: function(left) {
-          this.totalDependencies = Math.max(this.totalDependencies, left);
-          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
-        }
-      };
-      
+      // C++ template that wraps user.h for client-side compilation.
+      // Provides the same macros as the original main.cpp and exposes
+      // hear_c_init / hear_c_next_sample as extern "C" entry points.
+      var CPP_TEMPLATE = [
+        '#include <cmath>',
+        '#include <iostream>',
+        '#ifndef M_PI',
+        '#define M_PI 3.14159265358979323846',
+        '#endif',
+        '#define SAMPLE_RATE 44100',
+        '#define BUFFER_SIZE 1024',
+        '#define CHANNELS 2',
+        '// User code:',
+        '{USER_CODE}',
+        'extern "C" {',
+        '  void __attribute__((used)) hear_c_init() { init(); }',
+        '  float __attribute__((used)) hear_c_next_sample() { return nextSample(); }',
+        '}',
+        'int main() {',
+        '  std::cout << "Hear-C: Build successful!" << std::endl;',
+        '  return 0;',
+        '}'
+      ].join('\n');
 
-      
-      Module.setStatus('Downloading...');
-      
+      function stripAnsi(str) {
+        return str.replace(/\x1b\[[0-9;]*[mGKHF]/g, '');
+      }
 
-      
-
-      
-      window.onerror = function() {
-        Module.setStatus('Exception thrown, see JavaScript console');
-        Module.setStatus = function(text) {
-          if (text) console.error('[post-exception status] ' + text);
-        };
-      };
+      function appendToOutput(text) {
+        outputElement.value += stripAnsi(text);
+        outputElement.scrollTop = outputElement.scrollHeight;
+      }
 
       // Monaco Editor Setup
-      let editor;
-      let originalCode = '';
-      let editorActive = false; // Track if editor is active
-      const STORAGE_KEY = 'hear_c_user_code';
-      const DEFAULT_CODE_KEY = 'hear_c_default_code';
+      var editor;
+      var originalCode = '';
+      var editorActive = false;
+      var STORAGE_KEY = 'hear_c_user_code';
+      var DEFAULT_CODE_KEY = 'hear_c_default_code';
 
-      // Initialize the Monaco editor after the page loads
       window.addEventListener('load', function() {
-        // Configure Monaco loader
-        require.config({ 
-          paths: { 
-            'vs': 'https://unpkg.com/monaco-editor@0.44.0/min/vs' 
-          } 
-        });
+        require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@0.44.0/min/vs' } });
         
-        // Load Monaco Editor
         require(['vs/editor/editor.main'], function() {
-          // Create Monaco editor instance
           editor = monaco.editor.create(document.getElementById('monaco-editor'), {
             value: '',
             language: 'cpp',
@@ -204,168 +151,405 @@
             lineNumbers: 'on',
             roundedSelection: false,
             scrollBeyondLastLine: false,
-            minimap: {
-              enabled: true
-            },
+            minimap: { enabled: true },
             automaticLayout: true,
             tabSize: 2,
             insertSpaces: true,
             wordWrap: 'on',
-            bracketPairColorization: {
-              enabled: true
-            },
-            suggest: {
-              enabled: true
-            },
-            quickSuggestions: {
-              other: true,
-              comments: true,
-              strings: true
-            }
+            bracketPairColorization: { enabled: true },
+            suggest: { enabled: true },
+            quickSuggestions: { other: true, comments: true, strings: true }
           });
 
-          // Handle window resize and zoom changes
-          let resizeTimeout;
-          window.addEventListener('resize', () => {
+          var resizeTimeout;
+          window.addEventListener('resize', function() {
             clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(() => {
-              if (editor) {
-                editor.layout();
-              }
+            resizeTimeout = setTimeout(function() {
+              if (editor) editor.layout();
             }, 100);
           });
 
-          // Load the source code (from localStorage or server default)
           loadSourceCode();
 
-          // Handle editor focus events
-          editor.onDidFocusEditorWidget(() => {
-            editorActive = true;
-            console.log('Editor focused, keyboard input directed to Monaco');
-            
-            // Pause emscripten's keyboard events
-            if (Module.canvas) {
-              Module.canvas.blur();
-            }
-          });
-          
-          editor.onDidBlurEditorWidget(() => {
-            editorActive = false;
-            console.log('Editor blurred, keyboard input restored to canvas');
-            
-            // Restore focus to canvas for SDL keyboard events
-            if (Module.canvas) {
-              Module.canvas.focus();
-            }
-          });
-          
-          // Add Ctrl+S keyboard shortcut for saving
+          editor.onDidFocusEditorWidget(function() { editorActive = true; });
+          editor.onDidBlurEditorWidget(function() { editorActive = false; });
           editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
             saveSourceCode();
           });
-          
           console.log('Monaco Editor initialized successfully');
-        });
-        
-        // Manually blur the canvas when clicking on the editor
-        document.getElementById('monaco-editor').addEventListener('mousedown', function(e) {
-          if (Module.canvas) {
-            Module.canvas.blur();
-          }
         });
       });
 
-      // Function to load the source code (localStorage first, then server default)
       function loadSourceCode() {
-        // Try to load from localStorage first
-        const savedCode = localStorage.getItem(STORAGE_KEY);
-        
+        var savedCode = localStorage.getItem(STORAGE_KEY);
         if (savedCode) {
-          // Use saved code from localStorage
-          console.log('Loading code from localStorage');
           originalCode = savedCode;
-          if (editor) {
-            editor.setValue(savedCode);
-          }
+          if (editor) editor.setValue(savedCode);
           return;
         }
-        
-        // No saved code, load default from server
-        console.log('Loading default code from server');
         fetch('/source')
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP error! Status: ${response.status}`);
-            }
+          .then(function(response) {
+            if (!response.ok) throw new Error('HTTP error! Status: ' + response.status);
             return response.text();
           })
-          .then(code => {
+          .then(function(code) {
             originalCode = code;
-            if (editor) {
-              editor.setValue(code);
-            }
-            // Store the default code for reference
+            if (editor) editor.setValue(code);
             localStorage.setItem(DEFAULT_CODE_KEY, code);
-            console.log('Default source code loaded and cached');
           })
-          .catch(error => {
+          .catch(function(error) {
             console.error('Error loading source code:', error);
-            alert('Failed to load default source code. Make sure the server is running.');
           });
       }
 
-      // Function to save the source code to localStorage
       function saveSourceCode() {
-        const code = editor.getValue();
-        
+        var code = editor.getValue();
         try {
-          // Save to localStorage
           localStorage.setItem(STORAGE_KEY, code);
           originalCode = code;
-          
-          console.log('Source code saved to localStorage');
-          
-          // Show success message
-          const saveButton = document.getElementById('saveButton');
-          const originalText = saveButton.textContent;
-          saveButton.textContent = "Saved ✓";
-          setTimeout(() => {
-            saveButton.textContent = originalText;
-          }, 1500);
-          
+          var saveButton = document.getElementById('saveButton');
+          var originalText = saveButton.textContent;
+          saveButton.textContent = 'Saved \u2713';
+          setTimeout(function() { saveButton.textContent = originalText; }, 1500);
         } catch (error) {
           console.error('Error saving to localStorage:', error);
-          alert('Failed to save code to browser storage. Your browser may have storage restrictions.');
+          alert('Failed to save code to browser storage.');
         }
       }
 
-      // Initialize UI on load
+      function updateEditorStatus(message, isError) {
+        var statusEl = document.getElementById('editor-status');
+        if (statusEl) {
+          statusEl.textContent = message;
+          statusEl.style.color = isError ? '#ff7b72' : '#4ec9b0';
+        }
+      }
+
+      function showError(errorMessage) {
+        updateEditorStatus('Build failed', true);
+        var errorContainer = document.getElementById('error-container');
+        var errorContent = document.getElementById('error-content');
+        errorContainer.classList.add('visible');
+        errorContent.innerHTML = '';
+        var lines = errorMessage.split('\n');
+        lines.forEach(function(line) {
+          var div = document.createElement('div');
+          if (line.includes('error:')) {
+            div.className = 'error-line error';
+          } else if (line.includes('warning:')) {
+            div.className = 'error-line warning';
+          } else {
+            div.className = 'error-line';
+          }
+          div.textContent = line;
+          errorContent.appendChild(div);
+        });
+        setTimeout(function() { errorContainer.classList.remove('visible'); }, 10000);
+      }
+
+      // =====================================================================
+      // wasm-clang Worker API
+      // =====================================================================
+
+      function WorkerAPI() {
+        this.nextResponseId = 0;
+        this.responseCBs = new Map();
+        this.worker = new Worker('worker.js');
+        var channel = new MessageChannel();
+        this.port = channel.port1;
+        this.port.onmessage = this.onmessage.bind(this);
+        var remotePort = channel.port2;
+        this.worker.postMessage({id: 'constructor', data: remotePort}, [remotePort]);
+      }
+
+      WorkerAPI.prototype.runAsync = function(id, options) {
+        var responseId = this.nextResponseId++;
+        var self = this;
+        var responsePromise = new Promise(function(resolve, reject) {
+          self.responseCBs.set(responseId, {resolve: resolve, reject: reject});
+        });
+        this.port.postMessage({id: id, responseId: responseId, data: options});
+        return responsePromise;
+      };
+
+      WorkerAPI.prototype.compileAndGetWasm = function(code) {
+        return this.runAsync('compileAndGetWasm', code);
+      };
+
+      WorkerAPI.prototype.onmessage = function(event) {
+        switch (event.data.id) {
+          case 'write':
+            appendToOutput(event.data.data);
+            break;
+
+          case 'ready':
+            updateEditorStatus('Ready');
+            document.getElementById('rebuildButton').disabled = false;
+            appendToOutput('Compiler ready. Click "Build & Run" to compile your code.\n');
+            break;
+
+          case 'error':
+            updateEditorStatus('Compiler error', true);
+            appendToOutput('Compiler initialization error: ' + event.data.data + '\n');
+            break;
+
+          case 'runAsync': {
+            var responseId = event.data.responseId;
+            var promise = this.responseCBs.get(responseId);
+            if (promise) {
+              this.responseCBs.delete(responseId);
+              promise.resolve(event.data.data);
+            }
+            break;
+          }
+        }
+      };
+
+      var workerAPI = new WorkerAPI();
+
+      // =====================================================================
+      // WASI stubs for instantiating the compiled audio module
+      // =====================================================================
+
+      function WasiExit(code) {
+        this.code = code;
+        this.message = 'exit ' + code;
+      }
+      WasiExit.prototype = Object.create(Error.prototype);
+
+      function createWasiImports(getMemory) {
+        return {
+          wasi_unstable: {
+            proc_exit: function(code) { throw new WasiExit(code); },
+
+            fd_write: function(fd, iovs, iovs_len, nwritten_out) {
+              var memory = getMemory();
+              if (!memory) return 1;
+              var view = new DataView(memory.buffer);
+              var total = 0;
+              var text = '';
+              for (var i = 0; i < iovs_len; i++) {
+                var ptr = view.getUint32(iovs + i * 8, true);
+                var len = view.getUint32(iovs + i * 8 + 4, true);
+                var bytes = new Uint8Array(memory.buffer, ptr, len);
+                text += new TextDecoder().decode(bytes);
+                total += len;
+              }
+              view.setUint32(nwritten_out, total, true);
+              if (fd === 1 || fd === 2) appendToOutput(text);
+              return 0;
+            },
+
+            args_sizes_get: function(argc_out, argv_buf_size_out) {
+              var memory = getMemory();
+              if (!memory) return 0;
+              var view = new DataView(memory.buffer);
+              view.setUint32(argc_out, 0, true);
+              view.setUint32(argv_buf_size_out, 0, true);
+              return 0;
+            },
+
+            args_get: function(argv_ptr, argv_buf_ptr) { return 0; },
+
+            environ_sizes_get: function(count_out, buf_size_out) {
+              var memory = getMemory();
+              if (!memory) return 0;
+              var view = new DataView(memory.buffer);
+              view.setUint32(count_out, 0, true);
+              view.setUint32(buf_size_out, 0, true);
+              return 0;
+            },
+
+            environ_get: function(environ_ptr, environ_buf) { return 0; },
+
+            random_get: function(buf, buf_len) {
+              var memory = getMemory();
+              if (!memory) return 0;
+              var bytes = new Uint8Array(memory.buffer, buf, buf_len);
+              crypto.getRandomValues(bytes);
+              return 0;
+            },
+
+            clock_time_get: function(clock_id, precision, time_out) {
+              var memory = getMemory();
+              if (!memory) return 0;
+              var now = BigInt(Date.now()) * 1000000n;
+              new DataView(memory.buffer).setBigUint64(time_out, now, true);
+              return 0;
+            },
+
+            poll_oneoff: function(in_ptr, out_ptr, nsubscriptions, nevents_out) {
+              var memory = getMemory();
+              if (!memory) return 0;
+              new DataView(memory.buffer).setUint32(nevents_out, 0, true);
+              return 0;
+            },
+
+            fd_seek: function(fd, offset_low, offset_high, whence, newoffset_out) { return 0; },
+            fd_close: function(fd) { return 0; },
+            fd_read: function(fd, iovs, iovs_len, nread_out) {
+              var memory = getMemory();
+              if (!memory) return 0;
+              new DataView(memory.buffer).setUint32(nread_out, 0, true);
+              return 0;
+            },
+            fd_fdstat_get: function(fd, stat_out) { return 0; },
+            fd_prestat_get: function(fd, prestat_out) { return 8; },
+            fd_prestat_dir_name: function(fd, path_ptr, path_len) { return 28; },
+            path_open: function() { return 28; }
+          }
+        };
+      }
+
+      // =====================================================================
+      // Build & Audio
+      // =====================================================================
+
+      function buildAndRun() {
+        var rebuildButton = document.getElementById('rebuildButton');
+        rebuildButton.disabled = true;
+        rebuildButton.textContent = 'Building...';
+        updateEditorStatus('Compiling...', false);
+
+        document.getElementById('error-container').classList.remove('visible');
+
+        saveSourceCode();
+        var userCode = editor.getValue();
+        var fullCode = CPP_TEMPLATE.replace('{USER_CODE}', userCode);
+
+        appendToOutput('\n--- Building ---\n');
+
+        workerAPI.compileAndGetWasm(fullCode).then(function(result) {
+          if (result.success && result.wasm) {
+            appendToOutput('Linking complete.\n');
+            return WebAssembly.compile(result.wasm).then(function(mod) {
+              compiledWasmModule = mod;
+              updateEditorStatus('Build successful!', false);
+              appendToOutput('Build successful! Click "Start Audio" to run.\n');
+              document.getElementById('startAudio').disabled = false;
+            });
+          } else {
+            var errMsg = result.error || 'Unknown compilation error';
+            appendToOutput('Build failed: ' + errMsg + '\n');
+            showError(errMsg);
+          }
+        }).catch(function(err) {
+          appendToOutput('Build error: ' + err.message + '\n');
+          showError(err.message);
+        }).finally(function() {
+          rebuildButton.disabled = false;
+          rebuildButton.textContent = '\uD83D\uDD28 Build & Run';
+          if (document.getElementById('editor-status').textContent === 'Compiling...') {
+            updateEditorStatus('Ready');
+          }
+        });
+      }
+
+      function startAudio() {
+        if (!compiledWasmModule) {
+          alert('Please build the code first!');
+          return;
+        }
+
+        // Close previous audio context if any
+        if (audioContext) {
+          if (scriptNode) {
+            scriptNode.disconnect();
+            scriptNode = null;
+          }
+          audioContext.close().catch(function() {});
+          audioContext = null;
+        }
+
+        try {
+          window.AudioContext = window.AudioContext || window.webkitAudioContext;
+          audioContext = new AudioContext({sampleRate: 44100});
+
+          var wasmMemory = null;
+          var wasiImports = createWasiImports(function() { return wasmMemory; });
+
+          WebAssembly.instantiate(compiledWasmModule, wasiImports).then(function(instance) {
+            wasmMemory = instance.exports.memory;
+            wasmInstance = instance;
+
+            try {
+              instance.exports._start();
+            } catch (e) {
+              if (!(e instanceof WasiExit && e.code === 0)) {
+                throw e;
+              }
+            }
+
+            var nextSample = instance.exports.hear_c_next_sample;
+            if (!nextSample) {
+              throw new Error('hear_c_next_sample not found. Make sure your code defines nextSample().');
+            }
+
+            // ScriptProcessorNode is deprecated but used here because AudioWorklet
+            // would require sending compiled WASM bytes to a separate worklet context,
+            // adding significant complexity for this dynamic compilation use case.
+            scriptNode = audioContext.createScriptProcessor(1024, 0, 2);
+            scriptNode.onaudioprocess = function(event) {
+              var outputL = event.outputBuffer.getChannelData(0);
+              var outputR = event.outputBuffer.getChannelData(1);
+              for (var i = 0; i < outputL.length; i++) {
+                var sample = nextSample();
+                outputL[i] = sample;
+                outputR[i] = sample;
+              }
+            };
+            scriptNode.connect(audioContext.destination);
+
+            audioStarted = true;
+            document.getElementById('startAudio').textContent = '\u23F8\uFE0F Stop Audio';
+            appendToOutput('Audio started.\n');
+          }).catch(function(error) {
+            console.error('Error starting audio:', error);
+            appendToOutput('Error starting audio: ' + error.message + '\n');
+            alert('Error starting audio. Check the console output for details.');
+          });
+        } catch (error) {
+          console.error('Error starting audio:', error);
+          appendToOutput('Error starting audio: ' + error.message + '\n');
+          alert('Error starting audio. Check the console output for details.');
+        }
+      }
+
+      function stopAudio() {
+        try {
+          if (scriptNode) {
+            scriptNode.disconnect();
+            scriptNode = null;
+          }
+          if (audioContext) {
+            audioContext.suspend();
+          }
+          audioStarted = false;
+          document.getElementById('startAudio').textContent = '\u25B6\uFE0F Start Audio';
+          appendToOutput('Audio stopped.\n');
+        } catch (error) {
+          console.error('Error stopping audio:', error);
+        }
+      }
+
       window.addEventListener('load', function() {
-        updateEditorStatus('Ready');
-        
-        // Handle clear console button
         document.getElementById('clearConsole').addEventListener('click', function(event) {
           event.preventDefault();
           document.getElementById('output').value = '';
           updateEditorStatus('Console cleared');
-          setTimeout(() => {
-            updateEditorStatus('Ready');
-          }, 2000);
+          setTimeout(function() { updateEditorStatus('Ready'); }, 2000);
         });
 
-        // Handle error close button
         document.getElementById('error-close').addEventListener('click', function(event) {
           event.preventDefault();
           document.getElementById('error-container').classList.remove('visible');
         });
 
-        // Handle the save button click
         document.getElementById('saveButton').addEventListener('click', function(event) {
           event.preventDefault();
           saveSourceCode();
         });
 
-        // Handle the reset button click
         document.getElementById('resetButton').addEventListener('click', function(event) {
           event.preventDefault();
           if (confirm('Reset to default code? This will lose your current changes.')) {
@@ -373,275 +557,53 @@
           }
         });
 
-        // Handle the audio button (start/stop)
         document.getElementById('startAudio').addEventListener('click', function(event) {
           event.preventDefault();
           event.stopPropagation();
-          
           if (!audioStarted) {
-            // START AUDIO
-            try {
-              window.AudioContext = window.AudioContext || window.webkitAudioContext;
-              audioContext = new AudioContext();
-              
-              if (audioContext.state === 'suspended') {
-                audioContext.resume();
-              }
-              
-              window.SDL2 = window.SDL2 || {};
-              window.SDL2.audioContext = audioContext;
-              
-              // Call the WebAssembly startAudio function
-              if (typeof Module !== 'undefined' && Module._startAudio) {
-                console.log("Calling WebAssembly startAudio function");
-                Module._startAudio();
-              } else {
-                console.warn("WebAssembly startAudio function not available");
-              }
-              
-              audioStarted = true;
-              document.getElementById('startAudio').textContent = '⏸️ Stop Audio';
-              console.log("Audio context started and WebAssembly audio initiated");
-            } catch (error) {
-              console.error("Error starting audio:", error);
-              alert("Error starting audio. Check browser console for details.");
-            }
+            startAudio();
           } else {
-            // STOP AUDIO
-            try {
-              // Call the WebAssembly stopAudio function
-              if (typeof Module !== 'undefined' && Module._stopAudio) {
-                console.log("Calling WebAssembly stopAudio function");
-                Module._stopAudio();
-              } else {
-                console.warn("WebAssembly stopAudio function not available");
-              }
-              
-              if (audioContext) {
-                audioContext.close();
-                audioContext = null;
-              }
-              
-              audioStarted = false;
-              document.getElementById('startAudio').textContent = '▶️ Start Audio';
-              console.log("Audio stopped and WebAssembly audio terminated");
-            } catch (error) {
-              console.error("Error stopping audio:", error);
-            }
+            stopAudio();
           }
         });
 
-        // Handle the rebuild button click
         document.getElementById('rebuildButton').addEventListener('click', function(event) {
           event.preventDefault();
-          rebuildFromBrowser();
+          buildAndRun();
         });
       });
-      
-      // Function to reset code to default
+
       function resetToDefault() {
-        // Clear saved code from localStorage
         localStorage.removeItem(STORAGE_KEY);
-        
-        // Check if we have cached default code first
-        const cachedDefault = localStorage.getItem(DEFAULT_CODE_KEY);
-        
+
+        var cachedDefault = localStorage.getItem(DEFAULT_CODE_KEY);
+
         if (cachedDefault && editor) {
-          // Use cached default if available
           editor.setValue(cachedDefault);
-          console.log('Code reset to cached default');
           updateEditorStatus('Reset to default');
-          setTimeout(() => {
-            updateEditorStatus('Ready');
-          }, 2000);
+          setTimeout(function() { updateEditorStatus('Ready'); }, 2000);
         } else {
-          // Fetch fresh default from server
-          console.log('Fetching default code from server');
           updateEditorStatus('Loading default...', false);
-          
           fetch('/source')
-            .then(response => {
-              if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-              }
+            .then(function(response) {
+              if (!response.ok) throw new Error('HTTP error! Status: ' + response.status);
               return response.text();
             })
-            .then(code => {
+            .then(function(code) {
               if (editor) {
                 editor.setValue(code);
-                // Cache the default code for future use
                 localStorage.setItem(DEFAULT_CODE_KEY, code);
-                console.log('Code reset to server default');
                 updateEditorStatus('Reset to default');
-                setTimeout(() => {
-                  updateEditorStatus('Ready');
-                }, 2000);
-              } else {
-                throw new Error('Editor not available');
+                setTimeout(function() { updateEditorStatus('Ready'); }, 2000);
               }
             })
-            .catch(error => {
+            .catch(function(error) {
               console.error('Error loading default code:', error);
               updateEditorStatus('Reset failed', true);
-              alert('Failed to load default code from server. Please check your connection.');
-              setTimeout(() => {
-                updateEditorStatus('Ready');
-              }, 3000);
+              setTimeout(function() { updateEditorStatus('Ready'); }, 3000);
             });
         }
       }
-
-
-
-      // Function to update editor status
-      function updateEditorStatus(message, isError = false) {
-        const statusElement = document.getElementById('editor-status');
-        if (statusElement) {
-          statusElement.textContent = message;
-          statusElement.style.color = isError ? '#ff7b72' : '#4ec9b0';
-        }
-      }
-
-      // Update status messages throughout the application
-      function updateBuildStatus() {
-        updateEditorStatus('Building...', false);
-      }
-
-      // Enhanced error display
-      function showError(errorMessage) {
-        updateEditorStatus('Build failed', true);
-        
-        const errorContainer = document.getElementById('error-container');
-        const errorContent = document.getElementById('error-content');
-        
-        errorContainer.classList.add('visible');
-        errorContent.innerHTML = errorMessage.replace(/\n/g, '<br>');
-        
-        // Auto-hide after 10 seconds
-        setTimeout(() => {
-          errorContainer.classList.remove('visible');
-        }, 10000);
-      }
-
-      // Function to handle rebuild from browser
-      function rebuildFromBrowser() {
-        const rebuildButton = document.getElementById('rebuildButton');
-        
-        // Store current scroll position
-        const scrollPosition = window.scrollY;
-        
-        console.log("Rebuild button clicked");
-        
-        // Save the current code first
-        console.log("Auto-saving code before build...");
-        saveSourceCode();
-        
-        rebuildButton.disabled = true;
-        rebuildButton.textContent = "Building...";
-        updateEditorStatus('Saving & building...', false);
-        
-        // Hide any previous error display
-        const errorContainer = document.getElementById('error-container');
-        if (errorContainer) {
-          errorContainer.classList.remove('visible');
-        }
-        
-        // Get the current code from the editor
-        const currentCode = editor.getValue();
-        
-        // Make a request to the rebuild server with the current code
-        fetch('/rebuild', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            rebuild: true,
-            code: currentCode 
-          }),
-        })
-        .then(response => response.json())
-        .then(data => {
-          console.log("Rebuild response:", data);
-          
-          if (data.success) {
-            // Build successful
-            updateEditorStatus('Build successful! Refreshing...', false);
-            alert("Build successful! Refreshing page...");
-            // Reload the page to get the new build
-            setTimeout(() => {
-              window.location.reload();
-            }, 1000);
-          } else {
-            // Build failed - display errors
-            console.error("Build failed:", data.error);
-            updateEditorStatus('Build failed', true);
-            
-            // Show error container if available
-            if (errorContainer) {
-              const errorContent = document.getElementById('error-content');
-              if (errorContent) {
-                // Clear previous errors
-                errorContent.innerHTML = '';
-                
-                // Add error details
-                if (data.errorDetails && data.errorDetails.length) {
-                  data.errorDetails.forEach(error => {
-                    const errorLine = document.createElement('div');
-                    errorLine.className = 'error-line error';
-                    errorLine.textContent = error;
-                    errorContent.appendChild(errorLine);
-                  });
-                } else if (data.stderr) {
-                  // If no parsed errors, show raw stderr
-                  const stderrLines = data.stderr.split('\n');
-                  stderrLines.forEach(line => {
-                    const errorLine = document.createElement('div');
-                    if (line.includes('error:')) {
-                      errorLine.className = 'error-line error';
-                    } else if (line.includes('warning:')) {
-                      errorLine.className = 'error-line warning';
-                    } else {
-                      errorLine.className = 'error-line';
-                    }
-                    errorLine.textContent = line;
-                    errorContent.appendChild(errorLine);
-                  });
-                }
-                
-                // Make the error container visible
-                errorContainer.classList.add('visible');
-              }
-            }
-            
-            // Update button
-            rebuildButton.textContent = "⚒️ Build & Run";
-          }
-        })
-        .catch(error => {
-          console.error("Error during rebuild:", error);
-          updateEditorStatus('Build error', true);
-          alert("Error during rebuild. Make sure the rebuild server is running.");
-          rebuildButton.textContent = "⚒️ Build & Run";
-        })
-        .finally(() => {
-          // Restore scroll position
-          window.scrollTo({
-            top: scrollPosition,
-            behavior: 'instant'
-          });
-          
-          setTimeout(() => {
-            rebuildButton.disabled = false;
-            if (rebuildButton.textContent === "Building...") {
-              rebuildButton.textContent = "⚒️ Build & Run";
-            }
-          }, 3000);
-        });
-      }
-
-
     </script>
-    {{{ SCRIPT }}}
   </body>
 </html>
