@@ -678,6 +678,8 @@ class API {
     return await this.run(
         lld, 'wasm-ld', '--no-threads',
         '--export-dynamic',
+        '--export', 'hear_c_init',
+        '--export', 'hear_c_next_sample',
         '-z', `stack-size=${stackSize}`, `-L${libdir}`, crt1, obj, '-lc',
         '-lc++', '-lc++abi', '-o', wasm)
   }

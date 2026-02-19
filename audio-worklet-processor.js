@@ -130,6 +130,13 @@ class HearCProcessor extends AudioWorkletProcessor {
       // Call hear_c_init() to invoke the user's init() function
       if (typeof instance.exports.hear_c_init === 'function') {
         instance.exports.hear_c_init();
+      } else {
+        this.port.postMessage({ type: 'error', message: 'hear_c_init not found in exports — init() was not called. Make sure your code defines init().' });
+        return;
+      }
+      if (typeof instance.exports.hear_c_next_sample !== 'function') {
+        this.port.postMessage({ type: 'error', message: 'hear_c_next_sample not found in exports. Make sure your code defines nextSample().' });
+        return;
       }
       this.nextSample = instance.exports.hear_c_next_sample;
       this.ready = true;
