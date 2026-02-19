@@ -480,6 +480,17 @@
               }
             }
 
+            // Ensure user-provided init() is invoked via the exported entrypoint
+            // (hear_c_init) so internal state is initialized before audio begins.
+            if (typeof instance.exports.hear_c_init === 'function') {
+              try {
+                instance.exports.hear_c_init();
+              } catch (err) {
+                appendToOutput('Error during hear_c_init(): ' + (err && err.message ? err.message : err) + '\n');
+                console.error('hear_c_init error:', err);
+              }
+            }
+
             var nextSample = instance.exports.hear_c_next_sample;
             if (!nextSample) {
               throw new Error('hear_c_next_sample not found. Make sure your code defines nextSample().');
