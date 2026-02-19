@@ -63,7 +63,12 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/source') {
     try {
       const content = fs.readFileSync(path.join(__dirname, 'src', 'user.h'), 'utf8');
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.writeHead(200, {
+        'Content-Type': 'text/plain',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
       res.end(content);
     } catch (error) {
       res.writeHead(500);

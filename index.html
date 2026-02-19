@@ -109,13 +109,11 @@
         '#define M_PI 3.14159265358979323846',
         '#endif',
         '#define SAMPLE_RATE 44100',
-        '#define BUFFER_SIZE 1024',
-        '#define CHANNELS 2',
         '// User code:',
         '{USER_CODE}',
         'extern "C" {',
         '  void __attribute__((used)) hear_c_init() { init(); }',
-        '  float __attribute__((used)) hear_c_next_sample() { return nextSample(); }',
+        '  float __attribute__((used)) hear_c_next_sample() { return processSample(); }',
         '}',
         'int main() {',
         '  std::cout << "Hear-C: Build successful!" << std::endl;',
@@ -192,57 +190,28 @@
       // =====================================================================
 
       // Fallback default code in case server is unavailable
-      var FALLBACK_DEFAULT_CODE = `#ifndef USER_H
-#define USER_H
-
-/*
-NOTE: SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
+      var FALLBACK_DEFAULT_CODE = `/*
+__      __   _                    _         _  _                   ___ _
+\\ \\    / /__| |__ ___ _ __  ___  | |_ ___  | || |___ __ _ _ _ ___ / __| |
+ \\ \\/\\/ / -_) / _/ _ \\ '  \\/ -_) |  _/ _ \\ | __ / -_) _\` | '_|___| (__|_|
+  \\_/\\_/\\___|_\\__\\___/_|_|_\\___|  \\__\\___/ |_||_\\___\\__,_|_|      \\___(_)
 */
 
-// Simple sine wave oscillator
-class SinOsc {
-private:
-  float mPhase = 0.f;
-  float mSampleRate = 0.f;
-  float mFrequency = 440.f;
-
-public:
-  SinOsc() = delete;
-  SinOsc(float sampleRate) {
-    this->mSampleRate = sampleRate;
-  }
-
-  float freq() { return mFrequency; }
-  void freq(float newFreq) { this->mFrequency = newFreq; }
-
-  float processSample() {
-    mPhase += 2.0f * M_PI * mFrequency / mSampleRate;
-    if (mPhase > 2.0f * M_PI) {
-      mPhase -= 2.0f * M_PI;
-    }
-    return std::sin(mPhase);
-  }
-
-  float operator()() {
-    return this->processSample();
-  }
-};
-
-// Global oscillator instance
-SinOsc mOsc{SAMPLE_RATE};
-
-// Initialize - called once when app starts
+// init function, called once when app starts
+// this must be defined, or compilation will fail
 void init() {
-  std::cout << "Hear-C: Default sine wave loaded!" << std::endl;
-  mOsc.freq(220.f);
+  std::cout << "Init Called!" << std::endl;
 }
 
-// Generate audio sample - called for each sample
-float nextSample() {
-  return mOsc();
+// per-sample callback, no input (yet)
+// this must be defined, or compilation will fail
+float processSample() {
+  static float phase = 0.f;
+  phase += 220.f / SAMPLE_RATE; // SAMPLE_RATE macro comes pre-defined
+  phase = phase > 1.f ? 0.f : phase;
+  return std::sinf(phase * 2.f * M_PI);
 }
-
-#endif`;
+`;
 
       // Safe localStorage wrapper with fallbacks
       var StorageManager = {
@@ -305,23 +274,24 @@ float nextSample() {
         if (code.length < 10) return false; // Too short to be valid
         if (code.length > 1024 * 1024) return false; // Too large (1MB limit)
 
-        // Basic checks for C++ code structure
-        var hasClass = /class\s+\w+/.test(code);
-        var hasFunction = /void\s+init\s*\(/.test(code) || /float\s+nextSample\s*\(/.test(code);
-        var hasIncludeGuard = /#ifndef\s+USER_H/.test(code);
+        // Require both init() and processSample() functions
+        var hasInit = /void\s+init\s*\(/.test(code);
+        var hasProcessSample = /float\s+processSample\s*\(/.test(code);
 
-        return hasIncludeGuard && (hasClass || hasFunction);
+        return hasInit && hasProcessSample;
       }
 
       // Load default code with comprehensive fallbacks
-      function loadDefaultCode() {
+      function loadDefaultCode(forceFresh) {
         return new Promise(function(resolve, reject) {
-          // Try cached default first
-          var cachedDefault = StorageManager.getItem(DEFAULT_CODE_KEY);
-          if (cachedDefault && isValidCode(cachedDefault)) {
-            console.log('Using cached default code');
-            resolve(cachedDefault);
-            return;
+          // Try cached default first (unless forceFresh is true)
+          if (!forceFresh) {
+            var cachedDefault = StorageManager.getItem(DEFAULT_CODE_KEY);
+            if (cachedDefault && isValidCode(cachedDefault)) {
+              console.log('Using cached default code');
+              resolve(cachedDefault);
+              return;
+            }
           }
 
           // Try server
@@ -381,7 +351,7 @@ float nextSample() {
             updateEditorStatus('Failed to load code', true);
             // Show error in editor as last resort
             if (editor) {
-              editor.setValue('// Error: Could not load code\n// Please check your connection and refresh the page\n\nfloat nextSample() {\n  return 0.0f;\n}\n\nvoid init() {\n  // Initialization code here\n}');
+              editor.setValue('// Error: Could not load code\n// Please check your connection and refresh the page\n\nfloat processSample() {\n  return 0.0f;\n}\n\nvoid init() {\n  // Initialization code here\n}');
             }
             setTimeout(function() { updateEditorStatus('Ready'); }, 3000);
           });
@@ -703,9 +673,9 @@ float nextSample() {
               }
             }
 
-            var nextSample = instance.exports.hear_c_next_sample;
-            if (!nextSample) {
-              throw new Error('hear_c_next_sample not found. Make sure your code defines nextSample().');
+            var processSample = instance.exports.hear_c_next_sample;
+            if (!processSample) {
+              throw new Error('hear_c_next_sample not found. Make sure your code defines processSample().');
             }
 
             // ScriptProcessorNode is deprecated but used here because AudioWorklet
@@ -716,7 +686,7 @@ float nextSample() {
               var outputL = event.outputBuffer.getChannelData(0);
               var outputR = event.outputBuffer.getChannelData(1);
               for (var i = 0; i < outputL.length; i++) {
-                var sample = nextSample();
+                var sample = processSample();
                 outputL[i] = sample;
                 outputR[i] = sample;
               }
@@ -802,7 +772,8 @@ float nextSample() {
 
         updateEditorStatus('Loading default code...', false);
 
-        loadDefaultCode()
+        // Force fresh fetch from server to ensure we get latest changes
+        loadDefaultCode(true)
           .then(function(code) {
             originalCode = code;
             if (editor) editor.setValue(code);

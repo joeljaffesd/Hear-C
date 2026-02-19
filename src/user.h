@@ -1,52 +1,21 @@
-#ifndef USER_H
-#define USER_H
-
 /*
-NOTE: SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
+__      __   _                    _         _  _                   ___ _
+\ \    / /__| |__ ___ _ __  ___  | |_ ___  | || |___ __ _ _ _ ___ / __| |
+ \ \/\/ / -_) / _/ _ \ '  \/ -_) |  _/ _ \ | __ / -_) _` | '_|___| (__|_|
+  \_/\_/\___|_\__\___/_|_|_\___|  \__\___/ |_||_\___\__,_|_|      \___(_)
 */
 
-// object definition
-class SinOsc {
-private:
-  float mPhase = 0.f; 
-  float mSampleRate = 0.f;
-  float mFrequency = 440.f;
-
-public:
-  SinOsc() = delete;
-  SinOsc(float sampleRate) {
-    this->mSampleRate = sampleRate;
-  }
-
-  float freq() { return mFrequency; }
-  void freq(float newFreq) { this->mFrequency = newFreq; }
-
-  float processSample() {
-    mPhase += 2.0f * M_PI * mFrequency / mSampleRate;
-    if (mPhase > 2.0f * M_PI) {
-      mPhase -= 2.0f * M_PI;  // Keep phase in the [0, 2π] range
-    }
-    return std::sin(mPhase);
-  }
-
-  float operator()() {
-    return this->processSample();
-  }
-};
-
-// global instance of object
-SinOsc mOsc{SAMPLE_RATE};
-
 // init function, called once when app starts
-void init() { 
-  std::cout << "Init called!" << std::endl;
-  mOsc.freq(220.f);
+// this must be defined, or compilation will fail
+void init() {
+  std::cout << "Init Called!" << std::endl;
 }
 
 // per-sample callback, no input (yet)
 // this must be defined, or compilation will fail
-float nextSample() {
-  return mOsc();
+float processSample() {
+  static float phase = 0.f;
+  phase += 220.f / SAMPLE_RATE; // SAMPLE_RATE macro comes pre-defined
+  phase = phase > 1.f ? 0.f : phase;
+  return std::sinf(phase * 2.f * M_PI);
 }
-
-#endif
