@@ -96,8 +96,7 @@
       var audioContext = null;
       var audioStarted = false;
       var compiledWasmModule = null;
-      var scriptNode = null;
-      var wasmInstance = null;
+      var audioWorkletNode = null;
 
       // C++ template that wraps user.h for client-side compilation.
       // Provides the same macros as the original main.cpp and exposes
@@ -308,100 +307,6 @@
       var workerAPI = new WorkerAPI();
 
       // =====================================================================
-      // WASI stubs for instantiating the compiled audio module
-      // =====================================================================
-
-      function WasiExit(code) {
-        this.code = code;
-        this.message = 'exit ' + code;
-      }
-      WasiExit.prototype = Object.create(Error.prototype);
-
-      function createWasiImports(getMemory) {
-        return {
-          wasi_unstable: {
-            proc_exit: function(code) { throw new WasiExit(code); },
-
-            fd_write: function(fd, iovs, iovs_len, nwritten_out) {
-              var memory = getMemory();
-              if (!memory) return 1;
-              var view = new DataView(memory.buffer);
-              var total = 0;
-              var text = '';
-              for (var i = 0; i < iovs_len; i++) {
-                var ptr = view.getUint32(iovs + i * 8, true);
-                var len = view.getUint32(iovs + i * 8 + 4, true);
-                var bytes = new Uint8Array(memory.buffer, ptr, len);
-                text += new TextDecoder().decode(bytes);
-                total += len;
-              }
-              view.setUint32(nwritten_out, total, true);
-              if (fd === 1 || fd === 2) appendToOutput(text);
-              return 0;
-            },
-
-            args_sizes_get: function(argc_out, argv_buf_size_out) {
-              var memory = getMemory();
-              if (!memory) return 0;
-              var view = new DataView(memory.buffer);
-              view.setUint32(argc_out, 0, true);
-              view.setUint32(argv_buf_size_out, 0, true);
-              return 0;
-            },
-
-            args_get: function(argv_ptr, argv_buf_ptr) { return 0; },
-
-            environ_sizes_get: function(count_out, buf_size_out) {
-              var memory = getMemory();
-              if (!memory) return 0;
-              var view = new DataView(memory.buffer);
-              view.setUint32(count_out, 0, true);
-              view.setUint32(buf_size_out, 0, true);
-              return 0;
-            },
-
-            environ_get: function(environ_ptr, environ_buf) { return 0; },
-
-            random_get: function(buf, buf_len) {
-              var memory = getMemory();
-              if (!memory) return 0;
-              var bytes = new Uint8Array(memory.buffer, buf, buf_len);
-              crypto.getRandomValues(bytes);
-              return 0;
-            },
-
-            clock_time_get: function(clock_id, precision, time_out) {
-              var memory = getMemory();
-              if (!memory) return 0;
-              var now = BigInt(Date.now()) * 1000000n;
-              new DataView(memory.buffer).setBigUint64(time_out, now, true);
-              return 0;
-            },
-
-            poll_oneoff: function(in_ptr, out_ptr, nsubscriptions, nevents_out) {
-              var memory = getMemory();
-              if (!memory) return 0;
-              new DataView(memory.buffer).setUint32(nevents_out, 0, true);
-              return 0;
-            },
-
-            fd_seek: function(fd, offset_low, offset_high, whence, newoffset_out) { return 0; },
-            fd_close: function(fd) { return 0; },
-            fd_read: function(fd, iovs, iovs_len, nread_out) {
-              var memory = getMemory();
-              if (!memory) return 0;
-              new DataView(memory.buffer).setUint32(nread_out, 0, true);
-              return 0;
-            },
-            fd_fdstat_get: function(fd, stat_out) { return 0; },
-            fd_prestat_get: function(fd, prestat_out) { return 8; },
-            fd_prestat_dir_name: function(fd, path_ptr, path_len) { return 28; },
-            path_open: function() { return 28; }
-          }
-        };
-      }
-
-      // =====================================================================
       // Build & Audio
       // =====================================================================
 
@@ -453,9 +358,9 @@
 
         // Close previous audio context if any
         if (audioContext) {
-          if (scriptNode) {
-            scriptNode.disconnect();
-            scriptNode = null;
+          if (audioWorkletNode) {
+            audioWorkletNode.disconnect();
+            audioWorkletNode = null;
           }
           audioContext.close().catch(function() {});
           audioContext = null;
@@ -465,52 +370,31 @@
           window.AudioContext = window.AudioContext || window.webkitAudioContext;
           audioContext = new AudioContext({sampleRate: 44100});
 
-          var wasmMemory = null;
-          var wasiImports = createWasiImports(function() { return wasmMemory; });
+          audioContext.audioWorklet.addModule('audio-worklet-processor.js').then(function() {
+            audioWorkletNode = new AudioWorkletNode(audioContext, 'hear-c-processor');
 
-          WebAssembly.instantiate(compiledWasmModule, wasiImports).then(function(instance) {
-            wasmMemory = instance.exports.memory;
-            wasmInstance = instance;
-
-            try {
-              instance.exports._start();
-            } catch (e) {
-              if (!(e instanceof WasiExit && e.code === 0)) {
-                throw e;
-              }
-            }
-
-            // Ensure user-provided init() is invoked via the exported entrypoint
-            // (hear_c_init) so internal state is initialized before audio begins.
-            if (typeof instance.exports.hear_c_init === 'function') {
-              try {
-                instance.exports.hear_c_init();
-              } catch (err) {
-                appendToOutput('Error during hear_c_init(): ' + (err && err.message ? err.message : err) + '\n');
-                console.error('hear_c_init error:', err);
-              }
-            }
-
-            var nextSample = instance.exports.hear_c_next_sample;
-            if (!nextSample) {
-              throw new Error('hear_c_next_sample not found. Make sure your code defines nextSample().');
-            }
-
-            // ScriptProcessorNode is deprecated but used here because AudioWorklet
-            // would require sending compiled WASM bytes to a separate worklet context,
-            // adding significant complexity for this dynamic compilation use case.
-            scriptNode = audioContext.createScriptProcessor(1024, 0, 2);
-            scriptNode.onaudioprocess = function(event) {
-              var outputL = event.outputBuffer.getChannelData(0);
-              var outputR = event.outputBuffer.getChannelData(1);
-              for (var i = 0; i < outputL.length; i++) {
-                var sample = nextSample();
-                outputL[i] = sample;
-                outputR[i] = sample;
-              }
-            };
-            scriptNode.connect(audioContext.destination);
-
+            return new Promise(function(resolve, reject) {
+              audioWorkletNode.port.onmessage = function(event) {
+                var data = event.data;
+                if (data.type === 'ready') {
+                  resolve();
+                } else if (data.type === 'error') {
+                  reject(new Error(data.message));
+                } else if (data.type === 'stdout') {
+                  appendToOutput(data.text);
+                } else if (data.type === 'perf') {
+                  appendToOutput(
+                    '[AudioWorklet perf] avg: ' + data.avgMs.toFixed(4) + ' ms, ' +
+                    'max: ' + data.maxMs.toFixed(4) + ' ms, ' +
+                    'buffer: ' + data.bufferSize + ' samples @ ' + data.sampleRate + ' Hz\n'
+                  );
+                }
+              };
+              // WebAssembly.Module is structured-cloneable; send it to the worklet thread
+              audioWorkletNode.port.postMessage({ type: 'init', module: compiledWasmModule });
+            });
+          }).then(function() {
+            audioWorkletNode.connect(audioContext.destination);
             audioStarted = true;
             document.getElementById('startAudio').textContent = '\u23F8\uFE0F Stop Audio';
             appendToOutput('Audio started.\n');
@@ -528,12 +412,13 @@
 
       function stopAudio() {
         try {
-          if (scriptNode) {
-            scriptNode.disconnect();
-            scriptNode = null;
+          if (audioWorkletNode) {
+            audioWorkletNode.disconnect();
+            audioWorkletNode = null;
           }
           if (audioContext) {
-            audioContext.suspend();
+            audioContext.close().catch(function() {});
+            audioContext = null;
           }
           audioStarted = false;
           document.getElementById('startAudio').textContent = '\u25B6\uFE0F Start Audio';
