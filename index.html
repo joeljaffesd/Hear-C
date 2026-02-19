@@ -284,7 +284,8 @@
           case 'ready':
             updateEditorStatus('Ready');
             document.getElementById('rebuildButton').disabled = false;
-            appendToOutput('Compiler ready. Click "Build & Run" to compile your code.\n');
+            appendToOutput('Compiler ready. Building...\n');
+            buildAndRun();
             break;
 
           case 'error':
@@ -352,9 +353,12 @@
 
       function startAudio() {
         if (!compiledWasmModule) {
-          alert('Please build the code first!');
+          appendToOutput('Cannot start audio: no compiled module. Click "Build & Run" first.\n');
+          updateEditorStatus('Not built', true);
           return;
         }
+
+        appendToOutput('Starting audio...\n');
 
         // Close previous audio context if any
         if (audioContext) {
@@ -400,13 +404,11 @@
             appendToOutput('Audio started.\n');
           }).catch(function(error) {
             console.error('Error starting audio:', error);
-            appendToOutput('Error starting audio: ' + error.message + '\n');
-            alert('Error starting audio. Check the console output for details.');
+            appendToOutput('Error starting audio: ' + (error && error.message ? error.message : String(error)) + '\n');
           });
         } catch (error) {
           console.error('Error starting audio:', error);
-          appendToOutput('Error starting audio: ' + error.message + '\n');
-          alert('Error starting audio. Check the console output for details.');
+          appendToOutput('Error starting audio: ' + (error && error.message ? error.message : String(error)) + '\n');
         }
       }
 

@@ -39,7 +39,14 @@ class HearCProcessor extends AudioWorkletProcessor {
 
     const wasiImports = {
       wasi_unstable: {
-        proc_exit: () => {},
+        // proc_exit must throw so _start() / main() terminate cleanly.
+        // A no-op return causes execution to hit the post-exit `unreachable`
+        // instruction in the wasm binary, producing a WebAssembly.RuntimeError.
+        proc_exit: (code) => {
+          const err = new Error('proc_exit(' + code + ')');
+          err.wasiExitCode = code;
+          throw err;
+        },
 
         fd_write: (fd, iovs, iovs_len, nwritten_out) => {
           const mem = getMem();
@@ -121,11 +128,12 @@ class HearCProcessor extends AudioWorkletProcessor {
     WebAssembly.instantiate(module, wasiImports).then((instance) => {
       wasmMemory = instance.exports.memory;
       // Run _start() (calls main() which prints the build success message).
-      // A normal WASI exit(0) is expected and caught; unexpected errors are logged.
+      // main() calls proc_exit(0) on exit; we catch that as a normal termination.
       try { instance.exports._start(); } catch (err) {
-        if (err && err.message && !err.message.includes('exit 0')) {
-          this.port.postMessage({ type: 'stdout', text: 'Warning: _start() threw: ' + err.message + '\n' });
+        if (!err || err.wasiExitCode !== 0) {
+          this.port.postMessage({ type: 'stdout', text: 'Warning: _start() threw: ' + String(err) + '\n' });
         }
+        // wasiExitCode === 0 is a normal exit — silently continue
       }
       // Call hear_c_init() to invoke the user's init() function
       if (typeof instance.exports.hear_c_init === 'function') {
