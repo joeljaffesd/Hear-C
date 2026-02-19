@@ -140,6 +140,13 @@
       var DEFAULT_CODE_KEY = 'hear_c_default_code';
 
       window.addEventListener('load', function() {
+        // Check storage availability and warn if needed
+        if (!StorageManager.isAvailable()) {
+          console.warn('localStorage is not available. Code will not persist between sessions.');
+          updateEditorStatus('Warning: Storage unavailable - code will not be saved', true);
+          setTimeout(function() { updateEditorStatus('Ready'); }, 5000);
+        }
+
         require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@0.44.0/min/vs' } });
         
         require(['vs/editor/editor.main'], function() {
@@ -180,41 +187,246 @@
         });
       });
 
+      // =====================================================================
+      // Storage and Fallback Management
+      // =====================================================================
+
+      // Fallback default code in case server is unavailable
+      var FALLBACK_DEFAULT_CODE = `#ifndef USER_H
+#define USER_H
+
+/*
+NOTE: SAMPLE_RATE, BUFFER_SIZE, and CHANNELS macros come pre-defined
+*/
+
+// Simple sine wave oscillator
+class SinOsc {
+private:
+  float mPhase = 0.f;
+  float mSampleRate = 0.f;
+  float mFrequency = 440.f;
+
+public:
+  SinOsc() = delete;
+  SinOsc(float sampleRate) {
+    this->mSampleRate = sampleRate;
+  }
+
+  float freq() { return mFrequency; }
+  void freq(float newFreq) { this->mFrequency = newFreq; }
+
+  float processSample() {
+    mPhase += 2.0f * M_PI * mFrequency / mSampleRate;
+    if (mPhase > 2.0f * M_PI) {
+      mPhase -= 2.0f * M_PI;
+    }
+    return std::sin(mPhase);
+  }
+
+  float operator()() {
+    return this->processSample();
+  }
+};
+
+// Global oscillator instance
+SinOsc mOsc{SAMPLE_RATE};
+
+// Initialize - called once when app starts
+void init() {
+  std::cout << "Hear-C: Default sine wave loaded!" << std::endl;
+  mOsc.freq(220.f);
+}
+
+// Generate audio sample - called for each sample
+float nextSample() {
+  return mOsc();
+}
+
+#endif`;
+
+      // Safe localStorage wrapper with fallbacks
+      var StorageManager = {
+        isAvailable: function() {
+          try {
+            var test = '__storage_test__';
+            localStorage.setItem(test, test);
+            localStorage.removeItem(test);
+            return true;
+          } catch (e) {
+            return false;
+          }
+        },
+
+        getItem: function(key) {
+          if (!this.isAvailable()) {
+            console.warn('localStorage not available, skipping getItem for:', key);
+            return null;
+          }
+          try {
+            return localStorage.getItem(key);
+          } catch (e) {
+            console.error('Error reading from localStorage:', e);
+            return null;
+          }
+        },
+
+        setItem: function(key, value) {
+          if (!this.isAvailable()) {
+            console.warn('localStorage not available, skipping setItem for:', key);
+            return false;
+          }
+          try {
+            localStorage.setItem(key, value);
+            return true;
+          } catch (e) {
+            console.error('Error writing to localStorage:', e);
+            return false;
+          }
+        },
+
+        removeItem: function(key) {
+          if (!this.isAvailable()) {
+            console.warn('localStorage not available, skipping removeItem for:', key);
+            return false;
+          }
+          try {
+            localStorage.removeItem(key);
+            return true;
+          } catch (e) {
+            console.error('Error removing from localStorage:', e);
+            return false;
+          }
+        }
+      };
+
+      // Validate that stored code looks like valid C++ code
+      function isValidCode(code) {
+        if (!code || typeof code !== 'string') return false;
+        if (code.length < 10) return false; // Too short to be valid
+        if (code.length > 1024 * 1024) return false; // Too large (1MB limit)
+
+        // Basic checks for C++ code structure
+        var hasClass = /class\s+\w+/.test(code);
+        var hasFunction = /void\s+init\s*\(/.test(code) || /float\s+nextSample\s*\(/.test(code);
+        var hasIncludeGuard = /#ifndef\s+USER_H/.test(code);
+
+        return hasIncludeGuard && (hasClass || hasFunction);
+      }
+
+      // Load default code with comprehensive fallbacks
+      function loadDefaultCode() {
+        return new Promise(function(resolve, reject) {
+          // Try cached default first
+          var cachedDefault = StorageManager.getItem(DEFAULT_CODE_KEY);
+          if (cachedDefault && isValidCode(cachedDefault)) {
+            console.log('Using cached default code');
+            resolve(cachedDefault);
+            return;
+          }
+
+          // Try server
+          console.log('Fetching default code from server');
+          fetch('/source')
+            .then(function(response) {
+              if (!response.ok) {
+                throw new Error('Server returned ' + response.status);
+              }
+              return response.text();
+            })
+            .then(function(code) {
+              if (isValidCode(code)) {
+                // Cache the valid code
+                StorageManager.setItem(DEFAULT_CODE_KEY, code);
+                resolve(code);
+              } else {
+                throw new Error('Server returned invalid code');
+              }
+            })
+            .catch(function(error) {
+              console.warn('Failed to load from server, using fallback:', error);
+              // Use embedded fallback
+              if (isValidCode(FALLBACK_DEFAULT_CODE)) {
+                resolve(FALLBACK_DEFAULT_CODE);
+              } else {
+                reject(new Error('No valid default code available'));
+              }
+            });
+        });
+      }
+
       function loadSourceCode() {
-        var savedCode = localStorage.getItem(STORAGE_KEY);
-        if (savedCode) {
+        // Try to load user's saved code first
+        var savedCode = StorageManager.getItem(STORAGE_KEY);
+        if (savedCode && isValidCode(savedCode)) {
+          console.log('Loading saved user code');
           originalCode = savedCode;
           if (editor) editor.setValue(savedCode);
+          updateEditorStatus('Code loaded from browser storage');
+          setTimeout(function() { updateEditorStatus('Ready'); }, 2000);
           return;
         }
-        fetch('/source')
-          .then(function(response) {
-            if (!response.ok) throw new Error('HTTP error! Status: ' + response.status);
-            return response.text();
-          })
+
+        // No valid saved code, load defaults
+        console.log('No saved code found, loading defaults');
+        updateEditorStatus('Loading code...', false);
+        loadDefaultCode()
           .then(function(code) {
             originalCode = code;
             if (editor) editor.setValue(code);
-            localStorage.setItem(DEFAULT_CODE_KEY, code);
+            updateEditorStatus('Default code loaded');
+            setTimeout(function() { updateEditorStatus('Ready'); }, 2000);
           })
           .catch(function(error) {
-            console.error('Error loading source code:', error);
+            console.error('Failed to load any code:', error);
+            updateEditorStatus('Failed to load code', true);
+            // Show error in editor as last resort
+            if (editor) {
+              editor.setValue('// Error: Could not load code\n// Please check your connection and refresh the page\n\nfloat nextSample() {\n  return 0.0f;\n}\n\nvoid init() {\n  // Initialization code here\n}');
+            }
+            setTimeout(function() { updateEditorStatus('Ready'); }, 3000);
           });
       }
 
       function saveSourceCode() {
         var code = editor.getValue();
-        try {
-          localStorage.setItem(STORAGE_KEY, code);
+        if (!code || !isValidCode(code)) {
+          console.warn('Refusing to save invalid code');
+          alert('Code appears invalid. Please check for syntax errors before saving.');
+          return;
+        }
+
+        var success = StorageManager.setItem(STORAGE_KEY, code);
+        if (success) {
           originalCode = code;
           var saveButton = document.getElementById('saveButton');
           var originalText = saveButton.textContent;
           saveButton.textContent = 'Saved \u2713';
           setTimeout(function() { saveButton.textContent = originalText; }, 1500);
-        } catch (error) {
-          console.error('Error saving to localStorage:', error);
-          alert('Failed to save code to browser storage.');
+          console.log('Code saved successfully');
+        } else {
+          // Try alternative save methods or show options
+          console.error('Failed to save to localStorage');
+          var useFallback = confirm('Failed to save to browser storage. Would you like to download your code as a file instead?');
+          if (useFallback) {
+            downloadCodeAsFile(code);
+          } else {
+            alert('Code not saved. You can copy it manually or try again later.');
+          }
         }
+      }
+
+      // Download code as file when localStorage fails
+      function downloadCodeAsFile(code) {
+        var blob = new Blob([code], { type: 'text/plain' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'hear-c-code.cpp';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log('Code downloaded as file');
       }
 
       function updateEditorStatus(message, isError) {
@@ -585,35 +797,30 @@
       });
 
       function resetToDefault() {
-        localStorage.removeItem(STORAGE_KEY);
+        // Clear user code
+        StorageManager.removeItem(STORAGE_KEY);
 
-        var cachedDefault = localStorage.getItem(DEFAULT_CODE_KEY);
+        updateEditorStatus('Loading default code...', false);
 
-        if (cachedDefault && editor) {
-          editor.setValue(cachedDefault);
-          updateEditorStatus('Reset to default');
-          setTimeout(function() { updateEditorStatus('Ready'); }, 2000);
-        } else {
-          updateEditorStatus('Loading default...', false);
-          fetch('/source')
-            .then(function(response) {
-              if (!response.ok) throw new Error('HTTP error! Status: ' + response.status);
-              return response.text();
-            })
-            .then(function(code) {
-              if (editor) {
-                editor.setValue(code);
-                localStorage.setItem(DEFAULT_CODE_KEY, code);
-                updateEditorStatus('Reset to default');
-                setTimeout(function() { updateEditorStatus('Ready'); }, 2000);
-              }
-            })
-            .catch(function(error) {
-              console.error('Error loading default code:', error);
-              updateEditorStatus('Reset failed', true);
-              setTimeout(function() { updateEditorStatus('Ready'); }, 3000);
-            });
-        }
+        loadDefaultCode()
+          .then(function(code) {
+            originalCode = code;
+            if (editor) editor.setValue(code);
+            updateEditorStatus('Reset to default');
+            setTimeout(function() { updateEditorStatus('Ready'); }, 2000);
+          })
+          .catch(function(error) {
+            console.error('Failed to reset to default:', error);
+            updateEditorStatus('Reset failed - using fallback', true);
+
+            // Use embedded fallback as last resort
+            if (editor) {
+              editor.setValue(FALLBACK_DEFAULT_CODE);
+              originalCode = FALLBACK_DEFAULT_CODE;
+            }
+
+            setTimeout(function() { updateEditorStatus('Ready'); }, 3000);
+          });
       }
     </script>
   </body>
