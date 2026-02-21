@@ -29,6 +29,8 @@ Hear-C is a browser-based IDE (integrated development environment) for writing d
 
 1. Clone this repo
 
-2. Open `index.html` with a browser of your choice.
+2. `npm start` (or `SHIFT+CMD+B` with the source file open in VSCode)
+
+3. Navigate to `http://localhost:3000/` with your favorite browser
 
 > **Note:** C++ compilation happens entirely in the browser using wasm-clang. The first build may take a moment to download the compiler toolchain (~50 MB).
