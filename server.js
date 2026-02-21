@@ -109,3 +109,14 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`- Compilation happens entirely in the browser using wasm-clang`);
   console.log(`============================\n`);
 });
+
+// handle common server errors gracefully
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Error: port ${PORT} is already in use.`);
+    console.error('Either stop the process using that port or set a different PORT.')
+    process.exit(1);
+  }
+  console.error('Unexpected server error:', err);
+  process.exit(1);
+});
