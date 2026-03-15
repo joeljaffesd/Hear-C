@@ -5,17 +5,15 @@ __      __   _                    _         _  _                   ___ _
   \_/\_/\___|_\__\___/_|_|_\___|  \__\___/ |_||_\___\__,_|_|      \___(_)
 */
 
-// init function, called once when app starts
-// this must be defined, or compilation will fail
-void init() {
-  std::cout << "Init Called!" << std::endl;
-}
+// init() is called once on startup
+void init() {}
 
-// per-sample callback, no input (yet)
-// this must be defined, or compilation will fail
-float processSample() {
+// processSample(float input) is called once per sample at SAMPLE_RATE Hz
+// input:  current audio input sample [-1, 1]
+// return: output sample [-1, 1]
+float processSample(float input) {
   static float phase = 0.f;
   phase += 220.f / SAMPLE_RATE; // SAMPLE_RATE macro comes pre-defined
-  phase = phase > 1.f ? 0.f : phase;
+  if (phase > 1.f) phase -= 1.f;
   return std::sinf(phase * 2.f * M_PI);
 }

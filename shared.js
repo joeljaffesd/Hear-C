@@ -592,6 +592,13 @@ class API {
       '-ferror-limit', '19',
       '-fmessage-length', '80',
       '-fcolor-diagnostics',
+      // -fno-rtti: suppress typeinfo/vtable emission — eliminates large RTTI
+      //   tables that would otherwise be dragged in from libc++ even when
+      //   no dynamic_cast / typeid is used.
+      // -fno-use-cxa-atexit: suppress __cxa_atexit calls for static dtors,
+      //   avoiding a libc++abi import that can cause issues in reactor-style WASM.
+      '-fno-rtti',
+      '-fno-use-cxa-atexit',
     ];
 
     this.memfs = new MemFS({
@@ -667,18 +674,31 @@ class API {
         '-lc++', '-lc++abi', '-lcanvas', '-o', wasm)
   }
 
-  // Link for audio: like link() but without -lcanvas since we don't use canvas.
+  // Link for audio: produce a no-entry / reactor-style WASM with zero WASI
+  // imports so the module can be instantiated cleanly in AudioWorkletGlobalScope.
+  //
+  // Key differences from link():
+  //   - crt1.o is NOT linked: crt1.o hard-wires wasi_unstable.* imports
+  //     (proc_exit, fd_write, etc.) even when never called. Without crt1.o
+  //     and with --no-entry, the binary has zero imports.
+  //   - --no-entry: reactor module (no _start). process() is the entry point.
+  //   - --gc-sections + --strip-debug: dead-strip unreachable libc++ and
+  //     remove debug info, massively shrinking the binary.
+  //   - -fno-rtti / -fno-use-cxa-atexit are applied at compile time (clangCommonArgs).
   async linkForAudio(obj, wasm) {
-    const stackSize = 1024 * 1024;
+    const stackSize = 64 * 1024;
 
     const libdir = 'lib/wasm32-wasi';
-    const crt1 = `${libdir}/crt1.o`;
     await this.ready;
     const lld = await this.getModule(this.lldFilename);
     return await this.run(
         lld, 'wasm-ld', '--no-threads',
-        '--export-dynamic',
-        '-z', `stack-size=${stackSize}`, `-L${libdir}`, crt1, obj, '-lc',
+        '--no-entry',
+        '--export=process',
+        '--export=malloc',
+        '--gc-sections',
+        '--strip-debug',
+        '-z', `stack-size=${stackSize}`, `-L${libdir}`, obj, '-lc',
         '-lc++', '-lc++abi', '-o', wasm)
   }
 
