@@ -214,7 +214,7 @@ float processSample(float input) {
   static float phase = 0.f;
   phase += 220.f / SAMPLE_RATE; // SAMPLE_RATE macro comes pre-defined
   if (phase > 1.f) phase -= 1.f;
-  return std::sinf(phase * 2.f * M_PI);
+  return std::sinf(phase * 2.f * M_PI) * 0.2f;
 }
 `;
 
